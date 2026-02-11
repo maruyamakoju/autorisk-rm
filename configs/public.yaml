@@ -1,0 +1,28 @@
+# AutoRisk-RM Public Mode Configuration
+# Overrides for running with publicly available dashcam videos
+
+general:
+  output_dir: "outputs/public"
+
+mining:
+  top_n: 15
+  audio:
+    weight: 0.25
+  motion:
+    weight: 0.45
+  proximity:
+    weight: 0.30
+
+cosmos:
+  backend: "api"
+  api:
+    max_tokens: 1024
+
+report:
+  format: "html"
+  top_n_examples: 10
+
+public:
+  download_dir: "data/videos/public"
+  max_videos: 3
+  max_duration_sec: 300

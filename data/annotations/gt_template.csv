@@ -1,0 +1,5 @@
+clip_path,severity
+outputs/clips/candidate_001_t10.0s.mp4,HIGH
+outputs/clips/candidate_002_t25.0s.mp4,MEDIUM
+outputs/clips/candidate_003_t42.0s.mp4,LOW
+outputs/clips/candidate_004_t58.0s.mp4,NONE

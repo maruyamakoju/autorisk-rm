@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data & outputs
+outputs/
+data/videos/
+data/clips/
+*.mp4
+*.avi
+*.mkv
+*.mov
+
+# Keep annotation templates
+!data/annotations/*.csv
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Model weights
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Logs
+*.log
+logs/

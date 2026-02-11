@@ -1,0 +1,113 @@
+# AutoRisk-RM Default Configuration
+
+# --- General ---
+general:
+  seed: 42
+  device: "cuda"
+  output_dir: "outputs"
+  log_level: "INFO"
+
+# --- Video I/O ---
+video:
+  max_duration_sec: 3600      # Max input video length (1h)
+  segment_padding_sec: 5      # Seconds before/after peak for clip extraction
+  clip_fps: 10                # FPS for extracted clips
+  clip_max_frames: 100        # Max frames per clip sent to Cosmos
+  resize_short_edge: 480      # Resize short edge for processing
+
+# --- Mining (B1) ---
+mining:
+  window_sec: 1.0             # Scoring window duration
+  top_n: 30                   # Number of top candidates to extract
+  merge_gap_sec: 3.0          # Merge peaks closer than this
+
+  audio:
+    enabled: true
+    weight: 0.3
+    rms_threshold: 0.02       # RMS silence threshold
+    horn_band_hz: [300, 1000] # Horn frequency band
+    delta_window: 3           # Frames for delta-RMS
+
+  motion:
+    enabled: true
+    weight: 0.4
+    flow_scale: 0.5           # Farneback pyrScale
+    flow_levels: 3            # Farneback levels
+    flow_winsize: 15          # Farneback window size
+    magnitude_threshold: 2.0  # Min flow magnitude to consider
+
+  proximity:
+    enabled: true
+    weight: 0.3
+    model: "yolov8n.pt"
+    confidence: 0.3
+    classes: [0, 1, 2, 3, 5, 7]  # person, bicycle, car, motorcycle, bus, truck
+    bbox_area_norm: true       # Normalize bbox area by frame area
+    center_weight: 0.5         # Weight for center-proximity vs area
+
+  peak_detection:
+    distance: 5               # Min samples between peaks
+    prominence: 0.15           # Min peak prominence
+    height: 0.2               # Min peak height after normalization
+
+# --- Cosmos Inference (B2) ---
+cosmos:
+  backend: "api"              # "api" or "local"
+
+  api:
+    base_url: "https://integrate.api.nvidia.com/v1"
+    model: "nvidia/cosmos-reason2-2b"
+    max_tokens: 2048
+    temperature: 0.2
+    top_p: 0.7
+    rate_limit_rpm: 40
+    timeout_sec: 120
+    max_retries: 3
+    retry_delay_sec: 5
+
+  local:
+    model_name: "nvidia/Cosmos-Reason2-8B"
+    max_new_tokens: 2048
+    temperature: 0.2
+    torch_dtype: "bfloat16"
+
+  max_frames_per_clip: 16     # Frames sampled from each clip for inference
+
+# --- Ranking (B3) ---
+ranking:
+  severity_order: ["HIGH", "MEDIUM", "LOW", "NONE"]
+  tiebreak:
+    - "hazards_count"
+    - "evidence_count"
+    - "actor_count"
+
+# --- Evaluation (B4) ---
+eval:
+  gt_path: "data/annotations/gt_labels.csv"
+  checklist_path: "data/annotations/checklist_labels.csv"
+  severity_labels: ["NONE", "LOW", "MEDIUM", "HIGH"]
+
+# --- Ablation (B5) ---
+ablation:
+  pipeline_modes:
+    - "mining_only"
+    - "cosmos_only"
+    - "full"
+  signal_modes:
+    - "audio_only"
+    - "motion_only"
+    - "proximity_only"
+    - "all_signals"
+
+# --- Report ---
+report:
+  format: "html"              # "html" or "markdown"
+  template: "autorisk/report/templates/report.html.jinja2"
+  top_n_examples: 10          # Number of examples in report
+  include_thumbnails: true
+
+# --- Public Mode ---
+public:
+  download_dir: "data/videos/public"
+  max_videos: 5
+  max_duration_sec: 300       # 5 min per video

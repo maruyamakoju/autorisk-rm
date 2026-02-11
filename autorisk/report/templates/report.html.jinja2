@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title }}</title>
+<style>
+  :root {
+    --high: #dc3545;
+    --medium: #fd7e14;
+    --low: #ffc107;
+    --none: #28a745;
+    --bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text: #212529;
+    --border: #dee2e6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.4rem; margin: 2rem 0 1rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; }
+  h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+  .meta { color: #6c757d; margin-bottom: 2rem; }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .summary-card {
+    background: var(--card-bg);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+    border-left: 4px solid;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .summary-card.high { border-color: var(--high); }
+  .summary-card.medium { border-color: var(--medium); }
+  .summary-card.low { border-color: var(--low); }
+  .summary-card.none { border-color: var(--none); }
+  .summary-card .count { font-size: 2rem; font-weight: 700; }
+  .summary-card .label { font-size: 0.85rem; color: #6c757d; text-transform: uppercase; }
+  .card {
+    background: var(--card-bg);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-left: 4px solid var(--border);
+  }
+  .card.high { border-left-color: var(--high); }
+  .card.medium { border-left-color: var(--medium); }
+  .card.low { border-left-color: var(--low); }
+  .card.none { border-left-color: var(--none); }
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: white;
+  }
+  .badge.high { background: var(--high); }
+  .badge.medium { background: var(--medium); }
+  .badge.low { background: var(--low); }
+  .badge.none { background: var(--none); }
+  .detail { margin: 0.5rem 0; }
+  .detail-label { font-weight: 600; color: #495057; }
+  .hazard-list { list-style: none; padding-left: 1rem; }
+  .hazard-list li { margin: 0.3rem 0; }
+  .evidence-list { list-style: disc; padding-left: 1.5rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    background: var(--card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: #e9ecef; font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .metric-value { font-size: 1.5rem; font-weight: 700; }
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .metric-card {
+    background: var(--card-bg);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: #6c757d; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<h1>{{ title }}</h1>
+<p class="meta">
+  Generated: {{ generated_at }}
+  {% if video_name %}| Video: {{ video_name }}{% endif %}
+  | Total candidates: {{ total_candidates }}
+</p>
+
+<h2>Severity Summary</h2>
+<div class="summary-grid">
+  {% for sev, count in severity_summary.items() %}
+  <div class="summary-card {{ sev|lower }}">
+    <div class="count">{{ count }}</div>
+    <div class="label">{{ sev }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>Top {{ examples|length }} Risk Events</h2>
+{% for ex in examples %}
+<div class="card {{ ex.severity|lower }}">
+  <h3>
+    #{{ ex.rank }}
+    <span class="badge {{ ex.severity|lower }}">{{ ex.severity }}</span>
+    <span style="font-weight: normal; font-size: 0.9rem; color: #6c757d;">
+      confidence: {{ "%.2f"|format(ex.confidence) }}
+    </span>
+  </h3>
+
+  <div class="detail">
+    <span class="detail-label">Clip:</span> {{ ex.clip_name }}
+    | <span class="detail-label">Time:</span> {{ "%.1f"|format(ex.peak_time) }}s
+    | <span class="detail-label">Score:</span> {{ "%.3f"|format(ex.fused_score) }}
+  </div>
+
+  {% if ex.hazards %}
+  <div class="detail">
+    <span class="detail-label">Hazards:</span>
+    <ul class="hazard-list">
+      {% for h in ex.hazards %}
+      <li>{{ h.type }} — {{ h.actors }} ({{ h.spatial }})</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="detail">
+    <span class="detail-label">Causal Reasoning:</span> {{ ex.causal_reasoning }}
+  </div>
+  <div class="detail">
+    <span class="detail-label">Prediction:</span> {{ ex.prediction }}
+  </div>
+  <div class="detail">
+    <span class="detail-label">Recommended Action:</span> {{ ex.action }}
+  </div>
+
+  {% if ex.evidence %}
+  <div class="detail">
+    <span class="detail-label">Evidence:</span>
+    <ul class="evidence-list">
+      {% for e in ex.evidence %}
+      <li>{{ e }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% if eval %}
+<h2>Evaluation Metrics</h2>
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-value">{{ "%.1f"|format(eval.accuracy * 100) }}%</div>
+    <div class="label">Accuracy</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">{{ "%.3f"|format(eval.macro_f1) }}</div>
+    <div class="label">Macro-F1</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">{{ "%.2f"|format(eval.checklist.mean_total) }}/5</div>
+    <div class="label">Checklist</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">{{ eval.n_samples }}</div>
+    <div class="label">Samples</div>
+  </div>
+</div>
+
+{% if eval.confusion %}
+<h3>Confusion Matrix</h3>
+<table>
+  <tr>
+    <th>GT \ Pred</th>
+    {% for label in eval.confusion.keys() %}
+    <th>{{ label }}</th>
+    {% endfor %}
+  </tr>
+  {% for gt_label, row in eval.confusion.items() %}
+  <tr>
+    <td><strong>{{ gt_label }}</strong></td>
+    {% for pred_label, count in row.items() %}
+    <td>{{ count }}</td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endif %}
+
+{% if ablation %}
+<h2>Ablation Study</h2>
+<table>
+  <tr>
+    <th>Mode</th>
+    <th>Description</th>
+    <th>Candidates</th>
+    <th>Accuracy</th>
+    <th>Macro-F1</th>
+    <th>Checklist</th>
+  </tr>
+  {% for ab in ablation %}
+  <tr>
+    <td>{{ ab.mode }}</td>
+    <td>{{ ab.description }}</td>
+    <td>{{ ab.n_candidates }}</td>
+    <td>{{ "%.3f"|format(ab.accuracy) }}</td>
+    <td>{{ "%.3f"|format(ab.macro_f1) }}</td>
+    <td>{{ "%.2f"|format(ab.checklist_mean) }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<footer>
+  AutoRisk-RM v0.1.0 — Powered by NVIDIA Cosmos Reason 2
+</footer>
+
+</body>
+</html>

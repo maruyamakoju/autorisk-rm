@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "autorisk-rm"
+version = "0.1.0"
+description = "AutoRisk-RM: Automated Risk Mining from Dashcam Videos with NVIDIA Cosmos Reason 2"
+requires-python = ">=3.10"
+dependencies = [
+    "opencv-python>=4.8",
+    "ultralytics>=8.0",
+    "decord>=0.6",
+    "pydub>=0.25",
+    "scipy>=1.11",
+    "streamlit>=1.28",
+    "Jinja2>=3.1",
+    "yt-dlp>=2024.1",
+    "click>=8.1",
+    "pydantic>=2.5",
+    "omegaconf>=2.3",
+    "transformers>=4.40",
+    "supervision>=0.18",
+    "scikit-learn>=1.3",
+    "numpy>=1.24",
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+    "tqdm>=4.66",
+]
+
+[project.scripts]
+autorisk = "autorisk.cli:cli"
+
+[tool.setuptools.packages.find]
+include = ["autorisk*"]

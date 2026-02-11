@@ -1,0 +1,5 @@
+clip_path,actors_accurate,causal_clear,spatial_specific,prediction_plausible,action_reasonable
+outputs/clips/candidate_001_t10.0s.mp4,1,1,1,1,1
+outputs/clips/candidate_002_t25.0s.mp4,1,1,0,1,1
+outputs/clips/candidate_003_t42.0s.mp4,1,0,0,1,0
+outputs/clips/candidate_004_t58.0s.mp4,0,0,0,0,0
