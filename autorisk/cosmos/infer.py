@@ -134,6 +134,7 @@ class CosmosInferenceEngine:
                 system_prompt=SYSTEM_PROMPT,
                 user_prompt=user_prompt,
                 video_b64=video_b64,
+                video_path=clip_path,
             )
         except Exception as e:
             log.error("Inference failed for %s: %s", clip_path.name, e)
