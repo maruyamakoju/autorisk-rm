@@ -52,7 +52,7 @@ mining:
 
 # --- Cosmos Inference (B2) ---
 cosmos:
-  backend: "api"              # "api" or "local"
+  backend: "local"            # "local" (transformers) or "api" (NVIDIA Build)
 
   api:
     base_url: "https://integrate.api.nvidia.com/v1"
@@ -67,11 +67,12 @@ cosmos:
 
   local:
     model_name: "nvidia/Cosmos-Reason2-8B"
-    max_new_tokens: 2048
+    max_new_tokens: 4096
     temperature: 0.2
-    torch_dtype: "bfloat16"
+    torch_dtype: "float16"
 
-  max_frames_per_clip: 16     # Frames sampled from each clip for inference
+  local_fps: 4                # FPS for local video sampling (match training)
+  max_frames_per_clip: 16     # Frames sampled from each clip for API inference
 
 # --- Ranking (B3) ---
 ranking:

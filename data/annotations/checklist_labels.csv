@@ -1,0 +1,11 @@
+clip_path,actors_accurate,causal_clear,spatial_specific,prediction_plausible,action_reasonable
+outputs\cosmos_local\clips\candidate_001_t68.0s.mp4,1,1,1,1,1
+outputs\cosmos_local\clips\candidate_002_t10.0s.mp4,1,1,1,1,1
+outputs\cosmos_local\clips\candidate_003_t27.0s.mp4,1,1,1,1,1
+outputs\cosmos_local\clips\candidate_004_t47.0s.mp4,1,1,1,1,1
+outputs\cosmos_local\clips\candidate_005_t100.0s.mp4,1,1,1,1,1
+outputs\realistic3\clips\candidate_001_t68.0s.mp4,1,1,1,1,1
+outputs\realistic3\clips\candidate_002_t10.0s.mp4,1,1,1,1,1
+outputs\realistic3\clips\candidate_003_t27.0s.mp4,1,1,1,1,1
+outputs\realistic3\clips\candidate_004_t47.0s.mp4,1,1,1,1,1
+outputs\realistic3\clips\candidate_005_t100.0s.mp4,1,1,1,1,1

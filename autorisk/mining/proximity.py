@@ -65,8 +65,8 @@ class ProximityScorer(SignalScorer):
             if not ret:
                 break
 
-            # Run YOLO on a subset of frames (every 3rd) for speed
-            if frame_idx % 3 == 0:
+            # Run YOLO on a subset of frames (every 5th) for speed
+            if frame_idx % 5 == 0:
                 results = model(
                     frame,
                     conf=conf_thresh,

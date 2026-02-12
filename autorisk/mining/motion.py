@@ -13,11 +13,14 @@ from autorisk.utils.logger import setup_logger
 
 log = setup_logger(__name__)
 
+# Process every Nth frame for optical flow (3x-5x speedup)
+_FLOW_FRAME_SKIP = 3
+
 
 class MotionScorer(SignalScorer):
     """Score sudden large motions via dense optical flow.
 
-    Computes Farneback optical flow between consecutive frames,
+    Computes Farneback optical flow between sampled frames (every Nth),
     then aggregates per-window mean magnitude and variance.
     """
 
@@ -41,8 +44,6 @@ class MotionScorer(SignalScorer):
         n_windows = max(1, total_frames // frames_per_window)
 
         resize_h = self.cfg.video.resize_short_edge
-        magnitudes: list[float] = []
-        variances: list[float] = []
 
         ret, prev_frame = cap.read()
         if not ret:
@@ -51,14 +52,20 @@ class MotionScorer(SignalScorer):
 
         prev_gray = self._to_gray_resized(prev_frame, resize_h)
 
-        frame_mags: list[float] = []
-        frame_vars: list[float] = []
-        frame_idx = 1
+        # Per-window accumulators
+        window_mags: list[list[float]] = [[] for _ in range(n_windows)]
+        window_vars: list[list[float]] = [[] for _ in range(n_windows)]
 
+        frame_idx = 1
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
+
+            # Skip frames for speed
+            if frame_idx % _FLOW_FRAME_SKIP != 0:
+                frame_idx += 1
+                continue
 
             gray = self._to_gray_resized(frame, resize_h)
 
@@ -74,40 +81,30 @@ class MotionScorer(SignalScorer):
             )
 
             mag = np.sqrt(flow[..., 0] ** 2 + flow[..., 1] ** 2)
-            frame_mags.append(float(mag.mean()))
-            frame_vars.append(float(mag.var()))
-
-            # Window boundary
-            if frame_idx % frames_per_window == 0 and frame_mags:
-                magnitudes.append(np.mean(frame_mags))
-                variances.append(np.mean(frame_vars))
-                frame_mags.clear()
-                frame_vars.clear()
+            win_idx = min(frame_idx // frames_per_window, n_windows - 1)
+            window_mags[win_idx].append(float(mag.mean()))
+            window_vars[win_idx].append(float(mag.var()))
 
             prev_gray = gray
             frame_idx += 1
 
         cap.release()
 
-        # Flush remaining frames
-        if frame_mags:
-            magnitudes.append(np.mean(frame_mags))
-            variances.append(np.mean(frame_vars))
+        magnitudes = np.zeros(n_windows, dtype=np.float32)
+        variances = np.zeros(n_windows, dtype=np.float32)
 
-        if not magnitudes:
-            return np.zeros(n_windows, dtype=np.float32)
+        for i in range(n_windows):
+            if window_mags[i]:
+                magnitudes[i] = np.mean(window_mags[i])
+                variances[i] = np.mean(window_vars[i])
 
-        mag_arr = np.array(magnitudes, dtype=np.float32)
-        var_arr = np.array(variances, dtype=np.float32)
-
-        # Combine mean magnitude and variance (sudden motion = high both)
-        mag_n = self.normalize(mag_arr)
-        var_n = self.normalize(var_arr)
+        mag_n = self.normalize(magnitudes)
+        var_n = self.normalize(variances)
         combined = 0.6 * mag_n + 0.4 * var_n
 
         log.info(
-            "MotionScorer: %d windows, max_mag=%.3f, max_var=%.3f",
-            len(combined), mag_arr.max(), var_arr.max(),
+            "MotionScorer: %d windows, max_mag=%.3f, max_var=%.3f (skip=%d)",
+            len(combined), magnitudes.max(), variances.max(), _FLOW_FRAME_SKIP,
         )
         return combined
 

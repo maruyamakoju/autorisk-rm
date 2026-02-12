@@ -96,18 +96,27 @@ class ExplanationChecklist:
         self,
         responses: list[CosmosResponse],
         gt_map: dict[str, dict[str, int]] | None = None,
+        severity_filter: set[str] | None = None,
     ) -> list[ChecklistResult]:
         """Evaluate a batch of responses.
 
         Args:
             responses: List of Cosmos responses.
             gt_map: Optional mapping of clip_path -> per-item GT scores.
+            severity_filter: If set, only evaluate clips with these severities.
+                Defaults to {"MEDIUM", "HIGH"} to skip NONE/LOW clips where
+                actors and spatial relations are expected to be absent.
 
         Returns:
-            List of ChecklistResult.
+            List of ChecklistResult (only for included clips).
         """
+        if severity_filter is None:
+            severity_filter = {"MEDIUM", "HIGH"}
+
         results = []
         for r in responses:
+            if severity_filter and r.assessment.severity not in severity_filter:
+                continue
             gt = gt_map.get(r.request.clip_path) if gt_map else None
             results.append(self.evaluate_single(r, gt))
         return results
@@ -117,13 +126,14 @@ class ExplanationChecklist:
         """Compute mean scores across all results.
 
         Returns:
-            Dict with per-item means and overall mean total.
+            Dict with per-item means, overall mean total, and n_evaluated.
         """
         if not results:
-            return {item: 0.0 for item in CHECKLIST_ITEMS + ["mean_total"]}
+            return {item: 0.0 for item in CHECKLIST_ITEMS + ["mean_total", "n_evaluated"]}
 
         agg: dict[str, float] = {}
         for item in CHECKLIST_ITEMS:
             agg[item] = sum(r.scores.get(item, 0) for r in results) / len(results)
         agg["mean_total"] = sum(r.total for r in results) / len(results)
+        agg["n_evaluated"] = float(len(results))
         return agg

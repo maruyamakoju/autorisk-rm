@@ -23,6 +23,7 @@ env/
 outputs/
 data/videos/
 data/clips/
+data/public_samples/
 *.mp4
 *.avi
 *.mkv
@@ -30,6 +31,9 @@ data/clips/
 
 # Keep annotation templates
 !data/annotations/*.csv
+
+# Claude Code
+.claude/
 
 # OS
 .DS_Store

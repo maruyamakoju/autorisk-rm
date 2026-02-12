@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -111,11 +112,29 @@ class Evaluator:
 
         # Classification metrics (only if GT available)
         if gt_labels:
+            # Build multiple indices for flexible GT matching
+            gt_by_name: dict[str, str] = {}
+            gt_by_time: dict[str, str] = {}
+            for k, v in gt_labels.items():
+                gt_by_name[Path(k).name] = v
+                # Extract timestamp from filename like candidate_001_t68.0s.mp4
+                t_match = re.search(r"_t([\d.]+)s", Path(k).name)
+                if t_match:
+                    gt_by_time[t_match.group(1)] = v
+
             y_true, y_pred = [], []
             for r in responses:
                 clip = r.request.clip_path
-                if clip in gt_labels:
-                    y_true.append(gt_labels[clip])
+                gt_sev = gt_labels.get(clip)
+                if gt_sev is None:
+                    gt_sev = gt_by_name.get(Path(clip).name)
+                if gt_sev is None:
+                    # Match by timestamp (for ablation with different paths)
+                    t_match = re.search(r"_t([\d.]+)s", Path(clip).name)
+                    if t_match:
+                        gt_sev = gt_by_time.get(t_match.group(1))
+                if gt_sev is not None:
+                    y_true.append(gt_sev)
                     y_pred.append(r.assessment.severity)
 
             if y_true:
@@ -129,14 +148,28 @@ class Evaluator:
                     report.accuracy, report.macro_f1, len(y_true),
                 )
 
-        # Checklist evaluation
-        checklist_results = self.checklist.evaluate_batch(responses, checklist_gt)
-        report.checklist_means = ExplanationChecklist.aggregate(checklist_results)
-
-        log.info(
-            "Checklist mean total: %.2f/5",
-            report.checklist_means.get("mean_total", 0),
+        # Checklist evaluation (MEDIUM/HIGH only for meaningful scores)
+        checklist_results = self.checklist.evaluate_batch(
+            responses, checklist_gt, severity_filter={"MEDIUM", "HIGH"},
         )
+        if checklist_results:
+            report.checklist_means = ExplanationChecklist.aggregate(checklist_results)
+            log.info(
+                "Checklist mean total: %.2f/5 (%d MEDIUM/HIGH clips)",
+                report.checklist_means.get("mean_total", 0),
+                len(checklist_results),
+            )
+        else:
+            # Fallback: evaluate all clips if no MEDIUM/HIGH exist
+            checklist_results = self.checklist.evaluate_batch(
+                responses, checklist_gt, severity_filter=None,
+            )
+            report.checklist_means = ExplanationChecklist.aggregate(checklist_results)
+            log.info(
+                "Checklist mean total: %.2f/5 (all %d clips, no MEDIUM/HIGH found)",
+                report.checklist_means.get("mean_total", 0),
+                len(checklist_results),
+            )
 
         return report
 
@@ -158,12 +191,23 @@ class Evaluator:
         gt_labels: dict[str, str],
     ) -> list[dict]:
         """Identify misclassified examples."""
+        gt_by_name = {Path(k).name: v for k, v in gt_labels.items()}
+        gt_by_time: dict[str, str] = {}
+        for k, v in gt_labels.items():
+            t_m = re.search(r"_t([\d.]+)s", Path(k).name)
+            if t_m:
+                gt_by_time[t_m.group(1)] = v
+
         failures = []
         for r in responses:
             clip = r.request.clip_path
-            if clip not in gt_labels:
+            gt_sev = gt_labels.get(clip) or gt_by_name.get(Path(clip).name)
+            if gt_sev is None:
+                t_m = re.search(r"_t([\d.]+)s", Path(clip).name)
+                if t_m:
+                    gt_sev = gt_by_time.get(t_m.group(1))
+            if gt_sev is None:
                 continue
-            gt_sev = gt_labels[clip]
             pred_sev = r.assessment.severity
             if gt_sev != pred_sev:
                 failures.append({
