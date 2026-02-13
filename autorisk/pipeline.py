@@ -71,7 +71,7 @@ class Pipeline:
         # B2: Cosmos inference
         log.info("=== B2: Cosmos Inference ===")
         engine = CosmosInferenceEngine(self.cfg)
-        responses = engine.infer_batch(candidates)
+        responses = engine.infer_batch(candidates, output_dir=output_dir)
         engine.save_results(responses, output_dir)
         results["n_responses"] = len(responses)
 
@@ -107,9 +107,13 @@ class Pipeline:
             log.info("=== B5: Ablation Study ===")
             runner = AblationRunner(self.cfg)
 
-            gt_labels_abl = {}
-            if not skip_eval:
-                gt_labels_abl = evaluator.load_gt_labels(self.cfg.eval.gt_path)
+            # Load GT independently (evaluator may not exist if skip_eval)
+            gt_labels_abl: dict[str, str] = {}
+            try:
+                abl_evaluator = Evaluator()
+                gt_labels_abl = abl_evaluator.load_gt_labels(self.cfg.eval.gt_path)
+            except Exception:
+                pass
 
             signal_abl = runner.run_signal_ablation(
                 video_path, output_dir, gt_labels_abl or None,
@@ -171,6 +175,6 @@ class Pipeline:
         ]
 
         engine = CosmosInferenceEngine(self.cfg)
-        responses = engine.infer_batch(candidates)
+        responses = engine.infer_batch(candidates, output_dir=output_dir)
         engine.save_results(responses, output_dir)
         return responses

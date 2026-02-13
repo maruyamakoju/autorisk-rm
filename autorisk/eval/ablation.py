@@ -127,7 +127,6 @@ class AblationRunner:
         from autorisk.eval.evaluator import Evaluator
         from autorisk.mining.fuse import SignalFuser
         from autorisk.ranking import rank_responses
-        from autorisk.utils.video_io import get_video_info
 
         evaluator = Evaluator()
         results: list[AblationResult] = []
@@ -179,6 +178,105 @@ class AblationRunner:
                     description=f"Failed: {e}",
                     n_candidates=len(candidates_full),
                 ))
+
+        return results
+
+    def run_minimal_ablation(
+        self,
+        cosmos_results_path: Path,
+        gt_labels: dict[str, str],
+        output_dir: Path,
+    ) -> list[AblationResult]:
+        """Run minimal 3-mode ablation using existing Cosmos results.
+
+        Modes:
+            1. baseline: Map fused_score to severity via thresholds (no Cosmos)
+            2. cosmos_video: Use existing Cosmos video results (main pipeline)
+
+        This avoids re-running expensive Cosmos inference.
+        Cosmos-1frame can be added later if time allows.
+
+        Args:
+            cosmos_results_path: Path to cosmos_results.json from main run.
+            gt_labels: Ground truth severity labels.
+            output_dir: Output directory for ablation results.
+
+        Returns:
+            List of AblationResult.
+        """
+        from autorisk.cosmos.schema import (
+            CosmosRequest,
+            CosmosResponse,
+            RiskAssessment,
+        )
+        from autorisk.eval.evaluator import Evaluator
+
+        evaluator = Evaluator()
+        results: list[AblationResult] = []
+
+        # Load existing Cosmos results
+        with open(cosmos_results_path, encoding="utf-8") as f:
+            raw_results = json.load(f)
+
+        # --- Mode 1: Baseline (fused_score threshold, no Cosmos) ---
+        log.info("Minimal ablation: baseline (score threshold)")
+        baseline_responses = []
+        for entry in raw_results:
+            score = entry.get("fused_score", 0.0)
+            if score >= 0.7:
+                sev = "HIGH"
+            elif score >= 0.5:
+                sev = "MEDIUM"
+            elif score >= 0.3:
+                sev = "LOW"
+            else:
+                sev = "NONE"
+
+            request = CosmosRequest(
+                clip_path=entry.get("clip_path", ""),
+                candidate_rank=entry.get("candidate_rank", 0),
+                peak_time_sec=entry.get("peak_time_sec", 0.0),
+                fused_score=score,
+            )
+            assessment = RiskAssessment(
+                severity=sev,
+                causal_reasoning=f"Fused score {score:.3f} maps to {sev}",
+                confidence=score,
+            )
+            baseline_responses.append(CosmosResponse(
+                request=request, assessment=assessment, parse_success=True,
+            ))
+
+        baseline_eval = evaluator.evaluate(baseline_responses, gt_labels)
+        results.append(AblationResult(
+            mode="baseline",
+            description="Mining score threshold only (no Cosmos)",
+            accuracy=baseline_eval.accuracy,
+            macro_f1=baseline_eval.macro_f1,
+            checklist_mean=baseline_eval.checklist_means.get("mean_total", 0),
+            n_candidates=len(baseline_responses),
+        ))
+
+        # --- Mode 2: Cosmos video (existing results) ---
+        log.info("Minimal ablation: cosmos_video (existing results)")
+        video_responses = [CosmosResponse.from_dict(entry) for entry in raw_results]
+
+        video_eval = evaluator.evaluate(video_responses, gt_labels)
+        results.append(AblationResult(
+            mode="cosmos_video",
+            description="Full Cosmos Reason 2 video inference",
+            accuracy=video_eval.accuracy,
+            macro_f1=video_eval.macro_f1,
+            checklist_mean=video_eval.checklist_means.get("mean_total", 0),
+            n_candidates=len(video_responses),
+        ))
+
+        # Log summary
+        for r in results:
+            log.info(
+                "  %s: acc=%.3f, f1=%.3f, checklist=%.2f",
+                r.mode, r.accuracy, r.macro_f1, r.checklist_mean,
+            )
 
         return results
 

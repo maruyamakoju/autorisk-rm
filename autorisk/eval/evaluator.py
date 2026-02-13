@@ -27,6 +27,46 @@ class EvalReport:
     failures: list[dict] = field(default_factory=list)
 
 
+def _build_gt_indices(
+    gt_labels: dict[str, str],
+) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    """Build multiple lookup indices for flexible GT matching.
+
+    Returns:
+        Tuple of (gt_by_path, gt_by_name, gt_by_time).
+    """
+    gt_by_name: dict[str, str] = {}
+    gt_by_time: dict[str, str] = {}
+    for k, v in gt_labels.items():
+        gt_by_name[Path(k).name] = v
+        t_match = re.search(r"_t([\d.]+)s", Path(k).name)
+        if t_match:
+            gt_by_time[t_match.group(1)] = v
+    return gt_labels, gt_by_name, gt_by_time
+
+
+def _match_gt_label(
+    clip_path: str,
+    gt_by_path: dict[str, str],
+    gt_by_name: dict[str, str],
+    gt_by_time: dict[str, str],
+) -> str | None:
+    """Match a clip path to its GT label using multiple strategies.
+
+    Tries: exact path → filename → timestamp extraction.
+    """
+    gt_sev = gt_by_path.get(clip_path)
+    if gt_sev is not None:
+        return gt_sev
+    gt_sev = gt_by_name.get(Path(clip_path).name)
+    if gt_sev is not None:
+        return gt_sev
+    t_match = re.search(r"_t([\d.]+)s", Path(clip_path).name)
+    if t_match:
+        return gt_by_time.get(t_match.group(1))
+    return None
+
+
 class Evaluator:
     """End-to-end evaluator: GT loading, classification metrics, checklist."""
 
@@ -112,27 +152,13 @@ class Evaluator:
 
         # Classification metrics (only if GT available)
         if gt_labels:
-            # Build multiple indices for flexible GT matching
-            gt_by_name: dict[str, str] = {}
-            gt_by_time: dict[str, str] = {}
-            for k, v in gt_labels.items():
-                gt_by_name[Path(k).name] = v
-                # Extract timestamp from filename like candidate_001_t68.0s.mp4
-                t_match = re.search(r"_t([\d.]+)s", Path(k).name)
-                if t_match:
-                    gt_by_time[t_match.group(1)] = v
+            gt_by_path, gt_by_name, gt_by_time = _build_gt_indices(gt_labels)
 
             y_true, y_pred = [], []
             for r in responses:
-                clip = r.request.clip_path
-                gt_sev = gt_labels.get(clip)
-                if gt_sev is None:
-                    gt_sev = gt_by_name.get(Path(clip).name)
-                if gt_sev is None:
-                    # Match by timestamp (for ablation with different paths)
-                    t_match = re.search(r"_t([\d.]+)s", Path(clip).name)
-                    if t_match:
-                        gt_sev = gt_by_time.get(t_match.group(1))
+                gt_sev = _match_gt_label(
+                    r.request.clip_path, gt_by_path, gt_by_name, gt_by_time,
+                )
                 if gt_sev is not None:
                     y_true.append(gt_sev)
                     y_pred.append(r.assessment.severity)
@@ -162,7 +188,7 @@ class Evaluator:
         else:
             # Fallback: evaluate all clips if no MEDIUM/HIGH exist
             checklist_results = self.checklist.evaluate_batch(
-                responses, checklist_gt, severity_filter=None,
+                responses, checklist_gt, severity_filter=set(),
             )
             report.checklist_means = ExplanationChecklist.aggregate(checklist_results)
             log.info(
@@ -191,27 +217,19 @@ class Evaluator:
         gt_labels: dict[str, str],
     ) -> list[dict]:
         """Identify misclassified examples."""
-        gt_by_name = {Path(k).name: v for k, v in gt_labels.items()}
-        gt_by_time: dict[str, str] = {}
-        for k, v in gt_labels.items():
-            t_m = re.search(r"_t([\d.]+)s", Path(k).name)
-            if t_m:
-                gt_by_time[t_m.group(1)] = v
+        gt_by_path, gt_by_name, gt_by_time = _build_gt_indices(gt_labels)
 
         failures = []
         for r in responses:
-            clip = r.request.clip_path
-            gt_sev = gt_labels.get(clip) or gt_by_name.get(Path(clip).name)
-            if gt_sev is None:
-                t_m = re.search(r"_t([\d.]+)s", Path(clip).name)
-                if t_m:
-                    gt_sev = gt_by_time.get(t_m.group(1))
+            gt_sev = _match_gt_label(
+                r.request.clip_path, gt_by_path, gt_by_name, gt_by_time,
+            )
             if gt_sev is None:
                 continue
             pred_sev = r.assessment.severity
             if gt_sev != pred_sev:
                 failures.append({
-                    "clip_path": clip,
+                    "clip_path": r.request.clip_path,
                     "gt_severity": gt_sev,
                     "pred_severity": pred_sev,
                     "causal_reasoning": r.assessment.causal_reasoning[:200],

@@ -28,6 +28,7 @@ cosmos:
     max_new_tokens: 4096
     temperature: 0.2
     torch_dtype: "float16"
+    timeout_sec: 1200        # 20 min per clip max
   local_fps: 4
 
 report:

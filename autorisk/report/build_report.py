@@ -186,6 +186,5 @@ class ReportBuilder:
         summary: dict[str, int] = {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "NONE": 0}
         for r in responses:
             sev = r.assessment.severity.upper()
-            if sev in summary:
-                summary[sev] += 1
+            summary[sev] = summary.get(sev, 0) + 1
         return summary

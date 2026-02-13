@@ -39,6 +39,7 @@ data/public_samples/
 .DS_Store
 Thumbs.db
 desktop.ini
+nul
 
 # Model weights
 *.pt

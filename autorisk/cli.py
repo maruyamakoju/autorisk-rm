@@ -123,11 +123,7 @@ def evaluate(
     """Evaluate Cosmos results against ground truth (B4)."""
     import json
 
-    from autorisk.cosmos.schema import (
-        CosmosRequest,
-        CosmosResponse,
-        RiskAssessment,
-    )
+    from autorisk.cosmos.schema import CosmosResponse
     from autorisk.eval.evaluator import Evaluator
 
     cfg = ctx.obj["cfg"]
@@ -136,29 +132,7 @@ def evaluate(
     with open(results, encoding="utf-8") as f:
         raw_results = json.load(f)
 
-    responses: list[CosmosResponse] = []
-    for entry in raw_results:
-        from autorisk.cosmos.schema import HazardDetail
-        assessment = RiskAssessment(
-            severity=entry.get("severity", "NONE"),
-            hazards=[HazardDetail(**h) for h in entry.get("hazards", [])],
-            causal_reasoning=entry.get("causal_reasoning", ""),
-            short_term_prediction=entry.get("short_term_prediction", ""),
-            recommended_action=entry.get("recommended_action", ""),
-            evidence=entry.get("evidence", []),
-            confidence=entry.get("confidence", 0.0),
-        )
-        request = CosmosRequest(
-            clip_path=entry.get("clip_path", ""),
-            candidate_rank=entry.get("candidate_rank", 0),
-            peak_time_sec=entry.get("peak_time_sec", 0.0),
-            fused_score=entry.get("fused_score", 0.0),
-        )
-        responses.append(CosmosResponse(
-            request=request,
-            assessment=assessment,
-            parse_success=entry.get("parse_success", True),
-        ))
+    responses = [CosmosResponse.from_dict(entry) for entry in raw_results]
 
     evaluator = Evaluator(cfg.eval.severity_labels)
     gt_labels = evaluator.load_gt_labels(gt or cfg.eval.gt_path)
@@ -186,12 +160,7 @@ def report(
 
     from omegaconf import OmegaConf
 
-    from autorisk.cosmos.schema import (
-        CosmosRequest,
-        CosmosResponse,
-        HazardDetail,
-        RiskAssessment,
-    )
+    from autorisk.cosmos.schema import CosmosResponse
     from autorisk.ranking import rank_responses
     from autorisk.report.build_report import ReportBuilder
 
@@ -201,29 +170,122 @@ def report(
     with open(results, encoding="utf-8") as f:
         raw_results = json.load(f)
 
-    responses: list[CosmosResponse] = []
-    for entry in raw_results:
-        assessment = RiskAssessment(
-            severity=entry.get("severity", "NONE"),
-            hazards=[HazardDetail(**h) for h in entry.get("hazards", [])],
-            causal_reasoning=entry.get("causal_reasoning", ""),
-            short_term_prediction=entry.get("short_term_prediction", ""),
-            recommended_action=entry.get("recommended_action", ""),
-            evidence=entry.get("evidence", []),
-            confidence=entry.get("confidence", 0.0),
-        )
-        request = CosmosRequest(
-            clip_path=entry.get("clip_path", ""),
-            candidate_rank=entry.get("candidate_rank", 0),
-            peak_time_sec=entry.get("peak_time_sec", 0.0),
-            fused_score=entry.get("fused_score", 0.0),
-        )
-        responses.append(CosmosResponse(request=request, assessment=assessment))
+    responses = [CosmosResponse.from_dict(entry) for entry in raw_results]
 
     ranked = rank_responses(responses)
+
+    # Load eval and ablation results if available in the same directory
+    results_dir = Path(results).parent
+    eval_report = None
+    ablation_results = None
+
+    eval_path = results_dir / "eval_report.json"
+    if eval_path.exists():
+        from autorisk.eval.evaluator import EvalReport
+        with open(eval_path, encoding="utf-8") as ef:
+            eval_data = json.load(ef)
+        eval_report = EvalReport(
+            n_samples=eval_data.get("n_samples", 0),
+            accuracy=eval_data.get("accuracy", 0.0),
+            macro_f1=eval_data.get("macro_f1", 0.0),
+            checklist_means=eval_data.get("checklist_means", {}),
+            confusion=eval_data.get("confusion_matrix", {}),
+            failures=eval_data.get("failures", []),
+        )
+
+    ablation_path = results_dir / "ablation_results.json"
+    if ablation_path.exists():
+        from autorisk.eval.ablation import AblationResult
+        with open(ablation_path, encoding="utf-8") as af:
+            abl_data = json.load(af)
+        ablation_results = [
+            AblationResult(
+                mode=a["mode"],
+                description=a["description"],
+                accuracy=a.get("accuracy", 0.0),
+                macro_f1=a.get("macro_f1", 0.0),
+                checklist_mean=a.get("checklist_mean", 0.0),
+                n_candidates=a.get("n_candidates", 0),
+            )
+            for a in abl_data
+        ]
+
     builder = ReportBuilder(cfg)
-    report_path = builder.build(ranked, output_dir=Path(output_dir))
+    report_path = builder.build(
+        ranked,
+        eval_report=eval_report,
+        ablation_results=ablation_results,
+        output_dir=Path(output_dir),
+    )
     click.echo(f"Report generated: {report_path}")
+
+
+@cli.command()
+@click.option("--results", "-r", required=True, help="Path to cosmos_results.json")
+@click.option("--gt", "-g", default=None, help="Path to GT labels CSV")
+@click.option("--out", "-o", "output_dir", default="outputs/ablation", help="Output directory")
+@click.pass_context
+def ablation(
+    ctx: click.Context,
+    results: str,
+    gt: str | None,
+    output_dir: str,
+) -> None:
+    """Run minimal ablation study using existing Cosmos results (B5)."""
+    from autorisk.eval.ablation import AblationRunner
+    from autorisk.eval.evaluator import Evaluator
+
+    cfg = ctx.obj["cfg"]
+
+    evaluator = Evaluator(cfg.eval.severity_labels)
+    gt_path = gt or cfg.eval.gt_path
+    gt_labels = evaluator.load_gt_labels(gt_path)
+
+    if not gt_labels:
+        click.echo("Error: No GT labels found. Fill in data/annotations/gt_labels.csv first.", err=True)
+        raise SystemExit(1)
+
+    runner = AblationRunner(cfg)
+    abl_results = runner.run_minimal_ablation(
+        cosmos_results_path=Path(results),
+        gt_labels=gt_labels,
+        output_dir=Path(output_dir),
+    )
+
+    AblationRunner.save_results(abl_results, Path(output_dir))
+
+    click.echo("\nAblation Results:")
+    click.echo(f"{'Mode':<20} {'Accuracy':>10} {'Macro-F1':>10} {'Checklist':>10}")
+    click.echo("-" * 52)
+    for r in abl_results:
+        click.echo(
+            f"{r.mode:<20} {r.accuracy:>10.3f} {r.macro_f1:>10.3f} "
+            f"{r.checklist_mean:>10.2f}"
+        )
+
+
+@cli.command()
+@click.option("--results", "-r", required=True, help="Path to cosmos_results.json")
+@click.option("--out", "-o", "output_dir", default=None, help="Output directory (default: same as input)")
+@click.pass_context
+def reparse(ctx: click.Context, results: str, output_dir: str | None) -> None:
+    """Re-parse failed entries in cosmos_results.json with improved parser."""
+    from autorisk.cosmos.infer import CosmosInferenceEngine
+
+    results_path = Path(results)
+    responses = CosmosInferenceEngine.reparse_results(results_path)
+
+    # Save to output dir (or same dir as input)
+    save_dir = Path(output_dir) if output_dir else results_path.parent
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use the engine's save method
+    engine = CosmosInferenceEngine(ctx.obj["cfg"])
+    engine.save_results(responses, save_dir)
+
+    n_success = sum(1 for r in responses if r.parse_success)
+    click.echo(f"Re-parsed: {n_success}/{len(responses)} parse success")
+    click.echo(f"Saved to: {save_dir / 'cosmos_results.json'}")
 
 
 if __name__ == "__main__":

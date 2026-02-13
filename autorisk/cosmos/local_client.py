@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from pathlib import Path
 
 import torch
@@ -108,6 +110,7 @@ class CosmosLocalClient:
             },
         ]
 
+        t0 = time.time()
         inputs = self._processor.apply_chat_template(
             messages,
             tokenize=True,
@@ -117,14 +120,39 @@ class CosmosLocalClient:
             fps=self.fps,
         )
         inputs = inputs.to(self._model.device)
+        n_tokens = inputs.input_ids.shape[-1]
+        log.info(
+            "Preprocessed %s: %d input tokens (%.1fs)",
+            video_path.name, n_tokens, time.time() - t0,
+        )
 
-        with torch.inference_mode():
-            generated_ids = self._model.generate(
-                **inputs,
-                max_new_tokens=self.max_new_tokens,
-                temperature=self.temperature,
-                do_sample=self.temperature > 0,
-            )
+        t1 = time.time()
+        timeout_sec = self.cfg.cosmos.local.get("timeout_sec", 1200)
+
+        def _generate():
+            with torch.inference_mode():
+                return self._model.generate(
+                    **inputs,
+                    max_new_tokens=self.max_new_tokens,
+                    temperature=self.temperature,
+                    do_sample=self.temperature > 0,
+                )
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_generate)
+            try:
+                generated_ids = future.result(timeout=timeout_sec)
+            except TimeoutError:
+                raise RuntimeError(
+                    f"Generation timed out after {timeout_sec}s for {video_path.name}"
+                )
+
+        gen_time = time.time() - t1
+        n_new = generated_ids.shape[-1] - n_tokens
+        log.info(
+            "Generated %d tokens in %.1fs (%.1f tok/s)",
+            n_new, gen_time, n_new / gen_time if gen_time > 0 else 0,
+        )
 
         # Trim input tokens from output
         generated_ids_trimmed = [

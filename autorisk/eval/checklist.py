@@ -92,27 +92,25 @@ class ExplanationChecklist:
             total=total,
         )
 
+    _DEFAULT_SEVERITY_FILTER = frozenset({"MEDIUM", "HIGH"})
+
     def evaluate_batch(
         self,
         responses: list[CosmosResponse],
         gt_map: dict[str, dict[str, int]] | None = None,
-        severity_filter: set[str] | None = None,
+        severity_filter: set[str] | None = _DEFAULT_SEVERITY_FILTER,
     ) -> list[ChecklistResult]:
         """Evaluate a batch of responses.
 
         Args:
             responses: List of Cosmos responses.
             gt_map: Optional mapping of clip_path -> per-item GT scores.
-            severity_filter: If set, only evaluate clips with these severities.
-                Defaults to {"MEDIUM", "HIGH"} to skip NONE/LOW clips where
-                actors and spatial relations are expected to be absent.
+            severity_filter: Only evaluate clips with these severities.
+                Defaults to {"MEDIUM", "HIGH"}. Pass empty set to evaluate all.
 
         Returns:
             List of ChecklistResult (only for included clips).
         """
-        if severity_filter is None:
-            severity_filter = {"MEDIUM", "HIGH"}
-
         results = []
         for r in responses:
             if severity_filter and r.assessment.severity not in severity_filter:

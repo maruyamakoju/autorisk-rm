@@ -38,27 +38,149 @@ def _parse_think_answer(text: str) -> tuple[str, str]:
     return think, answer
 
 
+def _close_json(text: str) -> str:
+    """Analyze JSON nesting state and append closing characters."""
+    in_string = False
+    escape_next = False
+    stack: list[str] = []
+
+    for ch in text:
+        if escape_next:
+            escape_next = False
+            continue
+        if in_string:
+            if ch == "\\":
+                escape_next = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            stack.append("}")
+        elif ch == "[":
+            stack.append("]")
+        elif ch in ("}", "]"):
+            if stack and stack[-1] == ch:
+                stack.pop()
+
+    suffix = ""
+    if in_string:
+        suffix += '"'
+    suffix += "".join(reversed(stack))
+    return text + suffix
+
+
+def _fix_missing_commas(text: str) -> str:
+    """Fix missing commas between JSON object fields.
+
+    LLMs sometimes output JSON with missing commas:
+        "field1": "value1"
+        "field2": "value2"
+    This inserts the missing comma.
+    """
+    # Pattern: end of a JSON value followed by whitespace then a new key
+    # Matches: "value"\n  "key" or number\n  "key" or ]\n  "key" or }\n  "key"
+    return re.sub(
+        r'("|\d|true|false|null|\]|\})\s*\n(\s*")',
+        r"\1,\n\2",
+        text,
+    )
+
+
+def _repair_truncated_json(text: str) -> str:
+    """Attempt to repair truncated JSON by closing open braces/brackets/strings.
+
+    The model sometimes generates JSON that gets cut off before completing,
+    leaving unclosed brackets, braces, or strings. This function adds the
+    minimum necessary closing characters. Also fixes missing commas.
+    """
+    # Fix missing commas first
+    text = _fix_missing_commas(text)
+
+    repaired = _close_json(text)
+
+    # If valid, return directly
+    try:
+        json.loads(repaired)
+        return repaired
+    except json.JSONDecodeError:
+        pass
+
+    # Try removing trailing incomplete key-value pair from the REPAIRED text.
+    # Handles: ..."value",\n  "truncated_key"}  →  ..."value"}
+    # Or:      ..."value",\n  "key": "truncated_val"}  →  ..."value"}
+    for pattern in [
+        r',\s*"[^"]*"\s*[}\]]*\s*$',       # orphan key without value
+        r',\s*"[^"]*"\s*:\s*"[^"]*"\s*[}\]]*\s*$',  # truncated key-value
+    ]:
+        cleaned = re.sub(pattern, "", repaired)
+        if cleaned != repaired:
+            candidate = _close_json(cleaned)
+            try:
+                json.loads(candidate)
+                return candidate
+            except json.JSONDecodeError:
+                pass
+
+    return repaired
+
+
 def _extract_json(text: str) -> dict | None:
-    """Try to extract a JSON object from text, handling markdown fences."""
+    """Try to extract a JSON object from text, handling markdown fences and truncation."""
     # Try direct parse
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # Try markdown code fence
-    fence_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-    if fence_match:
+    # Strip leading "json " prefix (model sometimes outputs "json {..." without fence)
+    stripped = text.strip()
+    if stripped.startswith("json"):
+        stripped = stripped[4:].strip()
         try:
-            return json.loads(fence_match.group(1))
+            return json.loads(stripped)
         except json.JSONDecodeError:
             pass
 
-    # Try finding first { ... } block
+    # Try markdown code fence (greedy match for content between fences)
+    fence_match = re.search(r"```(?:json)?\s*\n?(.*)\n?```", text, re.DOTALL)
+    if fence_match:
+        try:
+            return json.loads(fence_match.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+
+    # Try fence without closing ``` (model truncated before closing fence)
+    open_fence = re.search(r"```(?:json)?\s*\n?(.*)", text, re.DOTALL)
+    if open_fence:
+        inner = open_fence.group(1).strip()
+        # Try parsing the inner content directly
+        try:
+            return json.loads(inner)
+        except json.JSONDecodeError:
+            pass
+        # Try repairing truncated JSON inside the fence
+        repaired = _repair_truncated_json(inner)
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            pass
+
+    # Try finding first { ... } block (greedy: outermost braces)
     brace_match = re.search(r"\{.*\}", text, re.DOTALL)
     if brace_match:
         try:
             return json.loads(brace_match.group())
+        except json.JSONDecodeError:
+            pass
+
+    # Try finding { without matching } (truncated JSON)
+    brace_start = re.search(r"\{.*", text, re.DOTALL)
+    if brace_start:
+        repaired = _repair_truncated_json(brace_start.group())
+        try:
+            return json.loads(repaired)
         except json.JSONDecodeError:
             pass
 
@@ -284,11 +406,13 @@ class CosmosInferenceEngine:
     def infer_batch(
         self,
         candidates: list[Candidate],
+        output_dir: Path | None = None,
     ) -> list[CosmosResponse]:
         """Run inference on a batch of candidates.
 
         Args:
             candidates: List of mining candidates with clip paths.
+            output_dir: Optional dir for incremental saving after each clip.
 
         Returns:
             List of CosmosResponse objects.
@@ -312,6 +436,10 @@ class CosmosInferenceEngine:
                 response.assessment.confidence,
                 response.parse_success,
             )
+
+            # Save incrementally to prevent data loss on crash
+            if output_dir is not None:
+                self.save_results(responses, output_dir)
 
         return responses
 
@@ -349,7 +477,7 @@ class CosmosInferenceEngine:
                 "confidence": r.assessment.confidence,
                 "parse_success": r.parse_success,
                 "error": r.error,
-                "raw_answer": r.raw_answer[:1000] if r.raw_answer else "",
+                "raw_answer": r.raw_answer or "",
             })
 
         with open(out_path, "w", encoding="utf-8") as f:
@@ -357,3 +485,70 @@ class CosmosInferenceEngine:
 
         log.info("Saved %d inference results to %s", len(results), out_path)
         return out_path
+
+    @staticmethod
+    def reparse_results(results_path: Path) -> list[CosmosResponse]:
+        """Re-parse saved results using the improved JSON parser.
+
+        Reads cosmos_results.json and re-attempts parsing on entries that
+        previously failed (parse_success=False). Useful after fixing the
+        parser without re-running expensive inference.
+
+        Args:
+            results_path: Path to cosmos_results.json.
+
+        Returns:
+            List of CosmosResponse with re-parsed assessments.
+        """
+        with open(results_path, encoding="utf-8") as f:
+            raw_results = json.load(f)
+
+        responses: list[CosmosResponse] = []
+        reparsed_count = 0
+
+        for entry in raw_results:
+            request = CosmosRequest(
+                clip_path=entry.get("clip_path", ""),
+                candidate_rank=entry.get("candidate_rank", 0),
+                peak_time_sec=entry.get("peak_time_sec", 0.0),
+                fused_score=entry.get("fused_score", 0.0),
+            )
+
+            raw_answer = entry.get("raw_answer", "")
+            was_failed = not entry.get("parse_success", True)
+
+            if was_failed and raw_answer:
+                # Re-attempt parsing with improved parser
+                json_data = _extract_json(raw_answer)
+
+                if json_data is None:
+                    # Try markdown fallback
+                    md_data = _parse_markdown_response(raw_answer)
+                    if md_data is not None:
+                        json_data = md_data
+
+                if json_data is not None:
+                    assessment = _dict_to_assessment(json_data)
+                    log.info(
+                        "Re-parsed %s: severity=%s",
+                        Path(entry["clip_path"]).name,
+                        assessment.severity,
+                    )
+                    responses.append(CosmosResponse(
+                        request=request,
+                        assessment=assessment,
+                        raw_answer=raw_answer,
+                        parse_success=True,
+                    ))
+                    reparsed_count += 1
+                    continue
+
+            # Keep original entry (either success or still-failed)
+            responses.append(CosmosResponse.from_dict(entry))
+
+        log.info(
+            "Re-parsed %d/%d previously failed entries",
+            reparsed_count,
+            sum(1 for e in raw_results if not e.get("parse_success", True)),
+        )
+        return responses

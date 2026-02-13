@@ -39,3 +39,32 @@ class CosmosResponse(BaseModel):
     raw_answer: str = Field(default="", description="Raw <answer> block content")
     parse_success: bool = True
     error: str = ""
+
+    @classmethod
+    def from_dict(cls, entry: dict) -> "CosmosResponse":
+        """Create a CosmosResponse from a raw dict (as stored in cosmos_results.json).
+
+        This is the single canonical way to deserialize saved results.
+        """
+        request = CosmosRequest(
+            clip_path=entry.get("clip_path", ""),
+            candidate_rank=entry.get("candidate_rank", 0),
+            peak_time_sec=entry.get("peak_time_sec", 0.0),
+            fused_score=entry.get("fused_score", 0.0),
+        )
+        assessment = RiskAssessment(
+            severity=entry.get("severity", "NONE"),
+            hazards=[HazardDetail(**h) for h in entry.get("hazards", [])],
+            causal_reasoning=entry.get("causal_reasoning", ""),
+            short_term_prediction=entry.get("short_term_prediction", ""),
+            recommended_action=entry.get("recommended_action", ""),
+            evidence=entry.get("evidence", []),
+            confidence=entry.get("confidence", 0.0),
+        )
+        return cls(
+            request=request,
+            assessment=assessment,
+            raw_answer=entry.get("raw_answer", ""),
+            parse_success=entry.get("parse_success", True),
+            error=entry.get("error", ""),
+        )
