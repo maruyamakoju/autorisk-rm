@@ -210,11 +210,38 @@ def report(
             for a in abl_data
         ]
 
+    # Load analysis report if available
+    analysis_report = None
+    analysis_path = results_dir / "analysis_report.json"
+    if analysis_path.exists():
+        from autorisk.eval.analysis import (
+            AnalysisReport,
+            ErrorDetail,
+            PerClassMetrics,
+            SignalAnalysisResult,
+        )
+        with open(analysis_path, encoding="utf-8") as anf:
+            an_data = json.load(anf)
+        analysis_report = AnalysisReport(
+            signal_analysis=[
+                SignalAnalysisResult(**s) for s in an_data.get("signal_analysis", [])
+            ],
+            signal_heatmap=an_data.get("signal_heatmap", {}),
+            per_class_metrics=[
+                PerClassMetrics(**m) for m in an_data.get("per_class_metrics", [])
+            ],
+            error_details=[
+                ErrorDetail(**e) for e in an_data.get("error_details", [])
+            ],
+            error_summary=an_data.get("error_summary", {}),
+        )
+
     builder = ReportBuilder(cfg)
     report_path = builder.build(
         ranked,
         eval_report=eval_report,
         ablation_results=ablation_results,
+        analysis_report=analysis_report,
         output_dir=Path(output_dir),
     )
     click.echo(f"Report generated: {report_path}")
@@ -262,6 +289,71 @@ def ablation(
             f"{r.mode:<20} {r.accuracy:>10.3f} {r.macro_f1:>10.3f} "
             f"{r.checklist_mean:>10.2f}"
         )
+
+
+@cli.command()
+@click.option("--results", "-r", required=True, help="Path to cosmos_results.json")
+@click.option("--candidates", "-c", "candidates_csv", default=None, help="Path to candidates.csv")
+@click.option("--gt", "-g", default=None, help="Path to GT labels CSV")
+@click.option("--out", "-o", "output_dir", default=None, help="Output directory (default: same as results)")
+@click.pass_context
+def analyze(
+    ctx: click.Context,
+    results: str,
+    candidates_csv: str | None,
+    gt: str | None,
+    output_dir: str | None,
+) -> None:
+    """Run deep analysis: signal contribution, error analysis, per-class metrics."""
+    from autorisk.eval.analysis import AnalysisEngine
+
+    cfg = ctx.obj["cfg"]
+    results_path = Path(results)
+    results_dir = results_path.parent
+    save_dir = Path(output_dir) if output_dir else results_dir
+
+    # Auto-discover candidates.csv and GT if not specified
+    cand_path = Path(candidates_csv) if candidates_csv else results_dir / "candidates.csv"
+    gt_path = Path(gt) if gt else Path(cfg.eval.gt_path)
+
+    if not cand_path.exists():
+        click.echo(f"Error: candidates.csv not found at {cand_path}", err=True)
+        raise SystemExit(1)
+    if not gt_path.exists():
+        click.echo(f"Error: GT labels not found at {gt_path}", err=True)
+        raise SystemExit(1)
+
+    engine = AnalysisEngine()
+    report = engine.run(
+        cosmos_results_path=results_path,
+        candidates_csv_path=cand_path,
+        gt_labels_path=gt_path,
+    )
+    engine.save(report, save_dir)
+
+    # Print summary
+    click.echo("\n=== Signal Contribution ===")
+    for s in report.signal_analysis:
+        click.echo(
+            f"  {s.signal_name:12s}  rho={s.spearman_rho:+.3f}  "
+            f"thresh_acc={s.threshold_accuracy:.3f}  thresh_f1={s.threshold_f1:.3f}"
+        )
+
+    click.echo("\n=== Per-Class Metrics ===")
+    click.echo(f"  {'Class':<8s} {'Precision':>9s} {'Recall':>8s} {'F1':>8s} {'Support':>8s}")
+    for m in report.per_class_metrics:
+        click.echo(
+            f"  {m.label:<8s} {m.precision:>9.3f} {m.recall:>8.3f} {m.f1:>8.3f} {m.support:>8d}"
+        )
+
+    click.echo(f"\n=== Error Analysis ({report.error_summary.get('total_errors', 0)} errors) ===")
+    es = report.error_summary
+    click.echo(f"  Over-estimation: {es.get('over_estimation', 0)} ({es.get('over_estimation_pct', 0):.0f}%)")
+    click.echo(f"  Under-estimation: {es.get('under_estimation', 0)}")
+    click.echo(f"  Adjacent miss (off by 1): {es.get('adjacent_miss', 0)} ({es.get('adjacent_miss_pct', 0):.0f}%)")
+    click.echo(f"  Major miss (off by 2+): {es.get('major_miss', 0)}")
+
+    click.echo(f"\nSaved to: {save_dir / 'analysis_report.json'}")
 
 
 @cli.command()

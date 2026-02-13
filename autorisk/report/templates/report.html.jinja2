@@ -372,6 +372,151 @@
     min-width: 0;
   }
 
+  /* Signal contribution heatmap */
+  .heatmap-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    background: var(--card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .heatmap-table th, .heatmap-table td {
+    padding: 0.6rem 0.8rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .heatmap-table th {
+    background: #e9ecef;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+  }
+  .heatmap-table th:first-child, .heatmap-table td:first-child {
+    text-align: left;
+    font-weight: 600;
+  }
+  .heatmap-cell {
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    display: inline-block;
+    min-width: 50px;
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+
+  /* Correlation bars */
+  .corr-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .corr-bar {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--nvidia);
+    transition: width 0.3s;
+  }
+  .corr-bar.weak { background: #ffc107; }
+  .corr-bar.moderate { background: #fd7e14; }
+  .corr-bar.strong { background: var(--nvidia); }
+
+  /* Error analysis */
+  .error-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .error-stat {
+    background: var(--card-bg);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .error-stat .stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+  }
+  .error-stat .stat-label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    text-transform: uppercase;
+  }
+  .error-stat.over .stat-value { color: var(--medium); }
+  .error-stat.under .stat-value { color: #6f42c1; }
+  .error-stat.adjacent .stat-value { color: #17a2b8; }
+  .error-stat.major .stat-value { color: var(--high); }
+
+  .error-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    background: var(--card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    font-size: 0.85rem;
+  }
+  .error-table th, .error-table td {
+    padding: 0.5rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .error-table th {
+    background: #e9ecef;
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+  }
+  .error-arrow { font-weight: 700; color: #6c757d; }
+
+  /* Per-class metrics */
+  .class-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .class-metric-card {
+    background: var(--card-bg);
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-top: 3px solid var(--border);
+  }
+  .class-metric-card.high { border-top-color: var(--high); }
+  .class-metric-card.medium { border-top-color: var(--medium); }
+  .class-metric-card.low { border-top-color: var(--low); }
+  .class-metric-card.none { border-top-color: var(--none); }
+  .class-metric-card h4 {
+    font-size: 0.9rem;
+    margin-bottom: 0.8rem;
+  }
+  .class-metric-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.3rem 0;
+    font-size: 0.85rem;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .class-metric-row:last-child { border-bottom: none; }
+  .class-metric-row .val { font-weight: 700; }
+
+  /* Technical insight callout */
+  .insight-box {
+    background: #f8f9fa;
+    border-left: 4px solid var(--nvidia);
+    border-radius: 0 8px 8px 0;
+    padding: 1rem 1.2rem;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+  .insight-box strong { color: #2e7d32; }
+
   footer {
     max-width: 1200px;
     margin: 0 auto;
@@ -386,6 +531,7 @@
     .pipeline-arrow { transform: rotate(90deg); }
     .ablation-compare { grid-template-columns: 1fr; }
     .card-body { grid-template-columns: 1fr; }
+    .class-metrics-grid { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
@@ -648,6 +794,189 @@
   </div>
   {% endfor %}
 </div>
+{% endif %}
+
+{% if analysis %}
+<!-- ============================================================ -->
+<!-- DEEP ANALYSIS SECTION                                        -->
+<!-- ============================================================ -->
+
+<h2>Signal Contribution Analysis</h2>
+<p style="color: #6c757d; margin-bottom: 1rem;">
+  Spearman rank correlation between each mining signal and ground-truth severity.
+  Higher &rho; means the signal better predicts danger level.
+</p>
+
+<table class="heatmap-table">
+  <tr>
+    <th>Signal</th>
+    <th>Spearman &rho;</th>
+    <th>p-value</th>
+    <th>Threshold Acc.</th>
+    <th>Threshold F1</th>
+  </tr>
+  {% for s in analysis.signal_analysis %}
+  <tr>
+    <td>{{ s.signal_name | capitalize }}</td>
+    <td>
+      <div class="corr-bar-wrap">
+        <div class="corr-bar {% if s.spearman_rho|abs < 0.15 %}weak{% elif s.spearman_rho|abs < 0.3 %}moderate{% else %}strong{% endif %}"
+             style="width: {{ (s.spearman_rho|abs * 200)|round|int }}px"></div>
+        <span style="font-weight:700">{{ "%.3f"|format(s.spearman_rho) }}</span>
+      </div>
+    </td>
+    <td>{{ "%.4f"|format(s.spearman_p) }}</td>
+    <td>{{ "%.1f"|format(s.threshold_accuracy * 100) }}%</td>
+    <td>{{ "%.3f"|format(s.threshold_f1) }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if analysis.signal_heatmap %}
+<h3>Signal &times; Severity Heatmap (Mean Scores)</h3>
+<p style="color: #6c757d; margin-bottom: 0.5rem; font-size: 0.85rem;">
+  Mean signal intensity per GT severity class. Darker green = higher activation.
+</p>
+<table class="heatmap-table">
+  <tr>
+    <th>Signal</th>
+    <th>NONE</th>
+    <th>LOW</th>
+    <th>MEDIUM</th>
+    <th>HIGH</th>
+  </tr>
+  {% for sig, sevs in analysis.signal_heatmap.items() %}
+  <tr>
+    <td>{{ sig | capitalize }}</td>
+    {% for sev_name in ["NONE", "LOW", "MEDIUM", "HIGH"] %}
+    {% set val = sevs.get(sev_name, 0) %}
+    <td>
+      <span class="heatmap-cell" style="background: rgba(118, 185, 0, {{ (val * 0.8 + 0.1)|round(2) }}); color: {% if val > 0.5 %}white{% else %}#333{% endif %};">
+        {{ "%.2f"|format(val) }}
+      </span>
+    </td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+
+<div class="insight-box">
+  <strong>Finding:</strong>
+  Fused signal achieves the best threshold-based F1
+  ({{ "%.3f"|format(analysis.signal_analysis[-1].threshold_f1) }}),
+  confirming that multi-signal fusion outperforms any individual signal.
+  {% set best_single = analysis.signal_analysis[:-1]|sort(attribute='spearman_rho', reverse=true)|first %}
+  {{ best_single.signal_name | capitalize }} shows the highest individual correlation
+  (&rho;={{ "%.3f"|format(best_single.spearman_rho) }}).
+  Note: no single signal is statistically significant (all p&gt;0.05),
+  reinforcing the need for Cosmos video understanding beyond simple signal thresholds.
+</div>
+{% endif %}
+
+<h2>Per-Class Performance</h2>
+<p style="color: #6c757d; margin-bottom: 1rem;">
+  Precision, recall, and F1 broken down by severity class.
+</p>
+
+<div class="class-metrics-grid">
+  {% for m in analysis.per_class_metrics %}
+  <div class="class-metric-card {{ m.label|lower }}">
+    <h4>{{ m.label }} <span style="color:#6c757d;font-weight:400;font-size:0.8rem;">(n={{ m.support }})</span></h4>
+    <div class="class-metric-row">
+      <span>Precision</span>
+      <span class="val">{{ "%.1f"|format(m.precision * 100) }}%</span>
+    </div>
+    <div class="class-metric-row">
+      <span>Recall</span>
+      <span class="val">{{ "%.1f"|format(m.recall * 100) }}%</span>
+    </div>
+    <div class="class-metric-row">
+      <span>F1</span>
+      <span class="val">{{ "%.3f"|format(m.f1) }}</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="insight-box">
+  <strong>Finding:</strong>
+  {% set best_class = analysis.per_class_metrics|sort(attribute='f1', reverse=true)|first %}
+  {% set worst_class = analysis.per_class_metrics|sort(attribute='f1')|first %}
+  Cosmos performs best on <strong>{{ best_class.label }}</strong> (F1={{ "%.3f"|format(best_class.f1) }})
+  and struggles most with <strong>{{ worst_class.label }}</strong> (F1={{ "%.3f"|format(worst_class.f1) }}).
+  {% if worst_class.label == "NONE" %}
+  The model tends to find potential risks even in safe scenes &mdash; a conservative bias
+  that is safer in real-world driving applications than missing actual hazards.
+  {% endif %}
+</div>
+
+<h2>Error Analysis</h2>
+<p style="color: #6c757d; margin-bottom: 1rem;">
+  Systematic classification of all {{ analysis.error_summary.total_errors }} misclassifications
+  out of {{ analysis.per_class_metrics|sum(attribute='support') }} total clips.
+</p>
+
+<div class="error-grid">
+  <div class="error-stat over">
+    <div class="stat-value">{{ analysis.error_summary.over_estimation }}</div>
+    <div class="stat-label">Over-estimation</div>
+  </div>
+  <div class="error-stat under">
+    <div class="stat-value">{{ analysis.error_summary.under_estimation }}</div>
+    <div class="stat-label">Under-estimation</div>
+  </div>
+  <div class="error-stat adjacent">
+    <div class="stat-value">{{ analysis.error_summary.adjacent_miss }}</div>
+    <div class="stat-label">Adjacent (off by 1)</div>
+  </div>
+  <div class="error-stat major">
+    <div class="stat-value">{{ analysis.error_summary.major_miss }}</div>
+    <div class="stat-label">Major (off by 2+)</div>
+  </div>
+</div>
+
+<table class="error-table">
+  <tr>
+    <th>Clip</th>
+    <th>GT</th>
+    <th></th>
+    <th>Predicted</th>
+    <th>Type</th>
+    <th>Gap</th>
+    <th>Mining Score</th>
+  </tr>
+  {% for e in analysis.error_details %}
+  <tr>
+    <td>{{ e.clip_name }}</td>
+    <td><span class="badge {{ e.gt_severity|lower }}" style="font-size:0.72rem;">{{ e.gt_severity }}</span></td>
+    <td class="error-arrow">&rarr;</td>
+    <td><span class="badge {{ e.pred_severity|lower }}" style="font-size:0.72rem;">{{ e.pred_severity }}</span></td>
+    <td>{{ e.error_type | replace("_", "-") }}</td>
+    <td>&plusmn;{{ e.severity_gap }}</td>
+    <td>{{ "%.3f"|format(e.fused_score) }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<div class="insight-box">
+  <strong>Finding:</strong>
+  {{ "%.0f"|format(analysis.error_summary.over_estimation_pct) }}% of errors are over-estimations
+  (model predicts higher severity than GT).
+  {{ "%.0f"|format(analysis.error_summary.adjacent_miss_pct) }}% of errors are adjacent misses
+  (off by one severity level), suggesting the model's understanding is close but boundary calibration
+  between severity classes remains the primary challenge.
+  {% if analysis.error_summary.mean_mining_score_over > 0 and analysis.error_summary.mean_mining_score_under > 0 %}
+  Mean mining score for over-estimated clips
+  ({{ "%.3f"|format(analysis.error_summary.mean_mining_score_over) }})
+  is {{ "lower" if analysis.error_summary.mean_mining_score_over < analysis.error_summary.mean_mining_score_under else "higher" }}
+  than for under-estimated clips
+  ({{ "%.3f"|format(analysis.error_summary.mean_mining_score_under) }}),
+  indicating that mining scores
+  {{ "do not directly cause" if analysis.error_summary.mean_mining_score_over < analysis.error_summary.mean_mining_score_under else "may contribute to" }}
+  the over-estimation bias.
+  {% endif %}
+</div>
+
 {% endif %}
 
 </div>

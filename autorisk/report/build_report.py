@@ -12,6 +12,7 @@ from omegaconf import DictConfig
 
 from autorisk.cosmos.schema import CosmosResponse
 from autorisk.eval.ablation import AblationResult
+from autorisk.eval.analysis import AnalysisReport
 from autorisk.eval.evaluator import EvalReport
 from autorisk.utils.logger import setup_logger
 
@@ -53,6 +54,7 @@ class ReportBuilder:
         responses: list[CosmosResponse],
         eval_report: EvalReport | None = None,
         ablation_results: list[AblationResult] | None = None,
+        analysis_report: AnalysisReport | None = None,
         output_dir: Path | str = "outputs",
         video_name: str = "",
     ) -> Path:
@@ -62,6 +64,7 @@ class ReportBuilder:
             responses: Ranked Cosmos responses.
             eval_report: Optional evaluation report.
             ablation_results: Optional ablation results.
+            analysis_report: Optional deep analysis report.
             output_dir: Output directory.
             video_name: Source video filename.
 
@@ -153,6 +156,45 @@ class ReportBuilder:
                 }
                 for r in ablation_results
             ]
+
+        if analysis_report is not None:
+            context["analysis"] = {
+                "signal_analysis": [
+                    {
+                        "signal_name": s.signal_name,
+                        "spearman_rho": s.spearman_rho,
+                        "spearman_p": s.spearman_p,
+                        "mean_score_by_severity": s.mean_score_by_severity,
+                        "threshold_accuracy": s.threshold_accuracy,
+                        "threshold_f1": s.threshold_f1,
+                    }
+                    for s in analysis_report.signal_analysis
+                ],
+                "signal_heatmap": analysis_report.signal_heatmap,
+                "per_class_metrics": [
+                    {
+                        "label": m.label,
+                        "precision": m.precision,
+                        "recall": m.recall,
+                        "f1": m.f1,
+                        "support": m.support,
+                    }
+                    for m in analysis_report.per_class_metrics
+                ],
+                "error_summary": analysis_report.error_summary,
+                "error_details": [
+                    {
+                        "clip_name": e.clip_name,
+                        "gt_severity": e.gt_severity,
+                        "pred_severity": e.pred_severity,
+                        "error_type": e.error_type,
+                        "severity_gap": e.severity_gap,
+                        "fused_score": e.fused_score,
+                        "reasoning_excerpt": e.reasoning_excerpt,
+                    }
+                    for e in analysis_report.error_details
+                ],
+            }
 
         fmt = self.cfg.report.format
         if fmt == "html":
