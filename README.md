@@ -264,6 +264,7 @@ python -m autorisk.cli -c configs/public.yaml run -i VIDEO -o OUTPUT_DIR
 ## Requirements
 
 - Python 3.10+
+- PyTorch 2.0+ with CUDA (install separately from [pytorch.org](https://pytorch.org/get-started/locally/) — not included in `pip install -e .` to avoid CPU-only fallback)
 - NVIDIA GPU with 16+ GB VRAM (RTX 4090/5090 recommended)
 - ~17 GB disk for Cosmos-Reason2-8B model weights
 - HuggingFace account with [model access](https://huggingface.co/nvidia/Cosmos-Reason2-8B)

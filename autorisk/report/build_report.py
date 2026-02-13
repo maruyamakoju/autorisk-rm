@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 from autorisk.cosmos.schema import CosmosResponse
 from autorisk.eval.ablation import AblationResult
