@@ -23,11 +23,44 @@ Long Dashcam Video (5 min+)
   [Report] ─────────────── HTML/Markdown with top incidents, metrics, and ablation table
 ```
 
+### B1: Multi-Signal Danger Mining
+
+```
+                         Long Dashcam Video (302s, 30 FPS)
+                    ┌──────────────┬───────────────┬──────────────┐
+                    ↓              ↓               ↓
+              ┌──────────┐  ┌───────────┐  ┌─────────────┐
+              │  Audio   │  │  Optical  │  │  Proximity  │
+              │  Scorer  │  │   Flow    │  │   (YOLO)    │
+              │          │  │  Scorer   │  │   Scorer    │
+              │ RMS +    │  │ Farneback │  │ YOLOv8n     │
+              │ delta +  │  │ magnitude │  │ bbox area + │
+              │ horn-band│  │ + variance│  │ center dist │
+              └────┬─────┘  └─────┬─────┘  └──────┬──────┘
+                   │              │               │
+              per-second     per-second      per-second
+               scores         scores          scores
+                   │              │               │
+                   └──────┬───────┴───────────────┘
+                          ↓
+                 ┌──────────────────┐
+                 │  Weighted Fusion │  audio=0.3, motion=0.4, proximity=0.3
+                 │  + Normalization │
+                 └────────┬─────────┘
+                          ↓
+                 ┌──────────────────┐
+                 │  Peak Detection  │  scipy.signal.find_peaks
+                 │  + Top-N Select  │  + neighbor merge (±5s clips)
+                 └────────┬─────────┘
+                          ↓
+                   20 candidate clips (10s each)
+```
+
 ## Key Features
 
 - **Multi-signal danger mining**: Fuses audio (RMS, delta-RMS, horn-band detection), optical flow (Farneback magnitude + variance), and object proximity (YOLOv8n bbox area + center distance) with configurable weights
 - **Cosmos Reason 2 video understanding**: Local inference on GPU with `nvidia/Cosmos-Reason2-8B` (Qwen3VL backbone, float16, ~16 GB VRAM). Produces structured JSON with severity, hazard details, causal reasoning, predictions, and recommended actions
-- **95% JSON parse success**: Robust multi-layer parsing with truncation repair (direct JSON → markdown fence → open fence + truncation repair → brace extraction → missing comma fix → trailing key cleanup → markdown field parser)
+- **100% JSON parse success**: Robust multi-layer parsing with truncation repair (direct JSON → markdown fence → open fence + truncation repair → brace extraction → missing comma fix → trailing key cleanup → markdown field parser)
 - **Reproducible Public Mode**: One-command pipeline using publicly available dashcam footage with blind-labeled ground truth
 - **Re-parse capability**: Fix parse failures without re-running expensive inference via `autorisk reparse`
 
@@ -140,6 +173,18 @@ Explanation Checklist (`data/annotations/checklist_labels.csv`) is scored only f
 | Parse success | 19/20 | 17/20 | **20/20** |
 | HIGH predictions | 14/20 | 3/20 | 3/20 |
 
+### Prediction Distribution Shift (v1 → v3)
+
+```
+              v1 (initial prompt)              v3 (calibrated + 2-stage)        Ground Truth
+  NONE  ██ 1                         NONE  ██ 2                        NONE  ████ 4
+  LOW   ██ 2                         LOW   ██████████ 10               LOW   █████████ 9
+  MED   ███ 3                        MED   █████ 5                     MED   ████ 4
+  HIGH  ██████████████ 14  ← bias    HIGH  ███ 3  ← matches GT        HIGH  ███ 3
+```
+
+Key insight: v1 classified 70% of clips as HIGH (GT: 15%). Calibration guidance + false-positive examples + removing danger-score priming reduced HIGH predictions to match the GT distribution exactly.
+
 ### Explanation Checklist (10 MEDIUM/HIGH clips, auto-heuristic)
 | Item | Score |
 |------|-------|
@@ -164,11 +209,34 @@ Explanation Checklist (`data/annotations/checklist_labels.csv`) is scored only f
 | Baseline (mining score threshold only) | 0.200 | 0.083 | 1.00/5 |
 | **Cosmos video (full pipeline)** | **0.350** | **0.346** | **5.00/5** |
 
+### 2-Stage Inference Strategy
+
+```
+Stage 1: Full analysis (all 20 clips)
+┌─────────────┐    ┌──────────────────┐    ┌──────────────────────────┐
+│  Video clip  │───→│  Cosmos Reason 2 │───→│  severity, hazards,      │
+│  (4 FPS)     │    │  (calibrated     │    │  causal_reasoning,       │
+│              │    │   prompt)        │    │  evidence, confidence    │
+└─────────────┘    └──────────────────┘    └──────────────────────────┘
+                                                       │
+                                           Filter: MEDIUM/HIGH clips
+                                           missing prediction/action
+                                                       ↓
+Stage 2: Supplement pass (10 clips)
+┌─────────────┐    ┌──────────────────┐    ┌──────────────────────────┐
+│  Same clip   │───→│  Cosmos Reason 2 │───→│  short_term_prediction,  │
+│  + Stage 1   │    │  (supplement     │    │  recommended_action      │
+│    context   │    │   prompt)        │    │  → merged into Stage 1   │
+└─────────────┘    └──────────────────┘    └──────────────────────────┘
+
+Result: Accurate classification (Stage 1) + Complete explanations (Stage 2) = 5.00/5 checklist
+```
+
 ### Key Findings
 
 1. **Prompt engineering fixes HIGH-severity bias**: The initial prompt caused 14/20 clips to be classified as HIGH (GT: 3 HIGH). After adding calibration guidance, false-positive examples, and removing danger-score priming, the model predicts HIGH for only 3/20 clips — matching the GT distribution. This improved Macro-F1 by **84%** (0.188 → 0.346).
 
-2. **2-stage inference recovers explanation completeness**: The calibrated prompt produces shorter outputs, dropping prediction/action fields. A lightweight 2nd-pass supplement (targeting only MEDIUM/HIGH clips with missing fields) recovers **perfect 5.00/5 checklist** without re-running full inference.
+2. **2-stage inference recovers explanation completeness**: The calibrated prompt produces shorter outputs, dropping prediction/action fields. A lightweight 2nd-pass supplement (targeting only MEDIUM/HIGH clips with missing fields) recovers **perfect 5.00/5 checklist** without re-running full inference. This decouples classification accuracy from explanation quality.
 
 3. **Cosmos dramatically improves over baseline**: Cosmos outperforms the score-threshold baseline on accuracy (+75%), F1 (+317%), and explanation quality (5.00 vs 1.00). This demonstrates that VLM-based video understanding adds substantial value beyond simple signal processing.
 
