@@ -131,38 +131,48 @@ Explanation Checklist (`data/annotations/checklist_labels.csv`) is scored only f
 
 ## Results (Public Mode, 20 clips)
 
-### Classification Metrics
-| Metric | v1 (initial) | v2 (calibrated prompt) |
-|--------|-------|-------|
-| Accuracy | 0.200 | **0.250** |
-| Macro-F1 | 0.188 | **0.291** |
-| Parse success | 19/20 (95%) | 17/20 (85%) |
+### Classification Metrics (Prompt Engineering Progression)
+| Metric | v1 (initial) | v2 (calibrated) | v3 (final) |
+|--------|-------|-------|-------|
+| Accuracy | 0.200 | 0.250 | **0.350** |
+| Macro-F1 | 0.188 | 0.291 | **0.346** |
+| Checklist | 3.83/5 | 3.00/5 | **5.00/5** |
+| Parse success | 19/20 | 17/20 | **20/20** |
+| HIGH predictions | 14/20 | 3/20 | 3/20 |
 
-### Explanation Checklist (MEDIUM/HIGH clips, auto-heuristic)
+### Explanation Checklist (10 MEDIUM/HIGH clips, auto-heuristic)
 | Item | Score |
 |------|-------|
 | Actors accurate | 1.00 |
 | Causal reasoning clear | 1.00 |
 | Spatial relations specific | 1.00 |
-| Short-term prediction plausible | 0.00 |
-| Recommended action reasonable | 0.00 |
-| **Mean total** | **3.00/5** |
+| Short-term prediction plausible | 1.00 |
+| Recommended action reasonable | 1.00 |
+| **Mean total** | **5.00/5** |
+
+### Confusion Matrix (rows=GT, cols=Predicted)
+|  | NONE | LOW | MEDIUM | HIGH |
+|------|------|-----|--------|------|
+| **NONE** (4) | 0 | 3 | 1 | 0 |
+| **LOW** (9) | 1 | 3 | 4 | 1 |
+| **MEDIUM** (4) | 0 | 2 | 2 | 0 |
+| **HIGH** (3) | 1 | 0 | 0 | 2 |
 
 ### Ablation Study
 | Mode | Accuracy | Macro-F1 | Checklist |
 |------|----------|----------|-----------|
 | Baseline (mining score threshold only) | 0.200 | 0.083 | 1.00/5 |
-| Cosmos video (full pipeline) | 0.250 | 0.291 | 3.00/5 |
+| **Cosmos video (full pipeline)** | **0.350** | **0.346** | **5.00/5** |
 
 ### Key Findings
 
-1. **Prompt engineering fixes HIGH-severity bias**: The initial prompt caused 14/20 clips to be classified as HIGH (GT: 3 HIGH). After adding calibration guidance, false-positive examples, and removing danger-score priming, the model predicts HIGH for only 3/20 clips — matching the GT distribution. This improved Macro-F1 by **55%** (0.188 → 0.291).
+1. **Prompt engineering fixes HIGH-severity bias**: The initial prompt caused 14/20 clips to be classified as HIGH (GT: 3 HIGH). After adding calibration guidance, false-positive examples, and removing danger-score priming, the model predicts HIGH for only 3/20 clips — matching the GT distribution. This improved Macro-F1 by **84%** (0.188 → 0.346).
 
-2. **Explanation quality is strong for core reasoning**: Perfect scores (1.0) for actor identification, causal reasoning, and spatial relations. Cosmos provides specific descriptions of actors, their spatial relationships, and causal chains. Short-term prediction and recommended action fields are sometimes omitted by the model due to early generation termination.
+2. **2-stage inference recovers explanation completeness**: The calibrated prompt produces shorter outputs, dropping prediction/action fields. A lightweight 2nd-pass supplement (targeting only MEDIUM/HIGH clips with missing fields) recovers **perfect 5.00/5 checklist** without re-running full inference.
 
-3. **Cosmos improves over baseline on all metrics**: With the calibrated prompt, Cosmos outperforms the score-threshold baseline on accuracy (+25%), F1 (+250%), and explanation quality (3.00 vs 1.00). This demonstrates the value of VLM-based reasoning over simple signal processing.
+3. **Cosmos dramatically improves over baseline**: Cosmos outperforms the score-threshold baseline on accuracy (+75%), F1 (+317%), and explanation quality (5.00 vs 1.00). This demonstrates that VLM-based video understanding adds substantial value beyond simple signal processing.
 
-4. **Robust JSON parsing recovers truncated model output**: The model sometimes generates JSON that is cut off before completion (missing closing braces, missing commas between fields). The multi-layer repair pipeline achieves 85-95% parse success rate across prompt variants.
+4. **Robust JSON parsing achieves 100% success**: Multi-layer repair pipeline (truncation repair, missing comma fix, trailing key cleanup, markdown fallback) plus reduced-FPS retry for stubborn clips achieves 20/20 parse success.
 
 ## CLI Commands
 
@@ -176,6 +186,7 @@ python -m autorisk.cli infer -d CLIPS_DIR -o OUTPUT_DIR   # B2: Cosmos inference
 python -m autorisk.cli eval -r RESULTS.json -o OUTPUT_DIR # B4: Evaluation
 python -m autorisk.cli ablation -r RESULTS.json -o DIR    # B5: Minimal ablation
 python -m autorisk.cli report -r RESULTS.json -o DIR      # Report generation
+python -m autorisk.cli supplement -r RESULTS.json           # Fill missing prediction/action (2nd pass)
 python -m autorisk.cli reparse -r RESULTS.json             # Re-parse failed entries
 
 # With public config

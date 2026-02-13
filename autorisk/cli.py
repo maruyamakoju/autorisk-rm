@@ -268,6 +268,35 @@ def ablation(
 @click.option("--results", "-r", required=True, help="Path to cosmos_results.json")
 @click.option("--out", "-o", "output_dir", default=None, help="Output directory (default: same as input)")
 @click.pass_context
+def supplement(ctx: click.Context, results: str, output_dir: str | None) -> None:
+    """Fill missing prediction/action fields via 2nd-pass inference."""
+    from autorisk.cosmos.infer import CosmosInferenceEngine
+
+    results_path = Path(results)
+    engine = CosmosInferenceEngine(ctx.obj["cfg"])
+    responses = engine.supplement_results(results_path)
+
+    save_dir = Path(output_dir) if output_dir else results_path.parent
+    save_dir.mkdir(parents=True, exist_ok=True)
+    engine.save_results(responses, save_dir)
+
+    n_supplemented = sum(
+        1 for r in responses
+        if r.assessment.severity in ("MEDIUM", "HIGH")
+        and r.assessment.short_term_prediction.strip()
+        and r.assessment.recommended_action.strip()
+    )
+    n_target = sum(
+        1 for r in responses if r.assessment.severity in ("MEDIUM", "HIGH")
+    )
+    click.echo(f"Supplement complete: {n_supplemented}/{n_target} MEDIUM/HIGH have prediction+action")
+    click.echo(f"Saved to: {save_dir / 'cosmos_results.json'}")
+
+
+@cli.command()
+@click.option("--results", "-r", required=True, help="Path to cosmos_results.json")
+@click.option("--out", "-o", "output_dir", default=None, help="Output directory (default: same as input)")
+@click.pass_context
 def reparse(ctx: click.Context, results: str, output_dir: str | None) -> None:
     """Re-parse failed entries in cosmos_results.json with improved parser."""
     from autorisk.cosmos.infer import CosmosInferenceEngine

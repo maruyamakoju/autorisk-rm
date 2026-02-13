@@ -9,7 +9,12 @@ from pathlib import Path
 from omegaconf import DictConfig
 from tqdm import tqdm
 
-from autorisk.cosmos.prompt import SYSTEM_PROMPT, USER_PROMPT
+from autorisk.cosmos.prompt import (
+    SYSTEM_PROMPT,
+    USER_PROMPT,
+    SUPPLEMENT_SYSTEM_PROMPT,
+    SUPPLEMENT_USER_PROMPT,
+)
 from autorisk.cosmos.schema import (
     CosmosRequest,
     CosmosResponse,
@@ -551,4 +556,105 @@ class CosmosInferenceEngine:
             reparsed_count,
             sum(1 for e in raw_results if not e.get("parse_success", True)),
         )
+        return responses
+
+    def supplement_results(
+        self,
+        results_path: Path,
+        severity_filter: set[str] | None = None,
+    ) -> list[CosmosResponse]:
+        """Run a 2nd-pass supplement on clips missing prediction/action fields.
+
+        Only processes MEDIUM/HIGH clips (or those in severity_filter) where
+        short_term_prediction or recommended_action is empty. Runs a short
+        prompt asking for just those 2 fields, then merges into existing results.
+
+        Args:
+            results_path: Path to cosmos_results.json.
+            severity_filter: Severities to supplement (default: MEDIUM, HIGH).
+
+        Returns:
+            List of CosmosResponse with supplemented fields.
+        """
+        if severity_filter is None:
+            severity_filter = {"MEDIUM", "HIGH"}
+
+        with open(results_path, encoding="utf-8") as f:
+            raw_results = json.load(f)
+
+        responses: list[CosmosResponse] = []
+        supplemented = 0
+
+        for entry in tqdm(raw_results, desc="Supplement pass"):
+            resp = CosmosResponse.from_dict(entry)
+            sev = resp.assessment.severity
+
+            needs_supplement = (
+                sev in severity_filter
+                and resp.parse_success
+                and (
+                    not resp.assessment.short_term_prediction.strip()
+                    or not resp.assessment.recommended_action.strip()
+                )
+            )
+
+            if needs_supplement:
+                clip_path = Path(resp.request.clip_path)
+                if not clip_path.exists():
+                    log.warning("Clip not found for supplement: %s", clip_path)
+                    responses.append(resp)
+                    continue
+
+                # Build hazards summary for the supplement prompt
+                hazards_summary = "; ".join(
+                    f"{h.type} involving {', '.join(h.actors)}"
+                    for h in resp.assessment.hazards
+                ) or "No specific hazards identified"
+
+                user_prompt = SUPPLEMENT_USER_PROMPT.format(
+                    severity=sev,
+                    hazards_summary=hazards_summary,
+                    causal_reasoning=resp.assessment.causal_reasoning[:300],
+                )
+
+                try:
+                    video_b64 = self.client.encode_video_base64(clip_path)
+                    raw = self.client.chat_completion(
+                        system_prompt=SUPPLEMENT_SYSTEM_PROMPT,
+                        user_prompt=user_prompt,
+                        video_b64=video_b64,
+                        video_path=clip_path,
+                    )
+
+                    _, answer = _parse_think_answer(raw)
+                    data = _extract_json(answer)
+                    if data is None:
+                        data = _extract_json(raw)
+
+                    if data is not None:
+                        if data.get("short_term_prediction"):
+                            resp.assessment.short_term_prediction = str(
+                                data["short_term_prediction"]
+                            )
+                        if data.get("recommended_action"):
+                            resp.assessment.recommended_action = str(
+                                data["recommended_action"]
+                            )
+                        supplemented += 1
+                        log.info(
+                            "Supplemented %s: prediction=%s, action=%s",
+                            clip_path.name,
+                            bool(resp.assessment.short_term_prediction),
+                            bool(resp.assessment.recommended_action),
+                        )
+                    else:
+                        log.warning(
+                            "Failed to parse supplement for %s", clip_path.name
+                        )
+                except Exception as e:
+                    log.error("Supplement failed for %s: %s", clip_path.name, e)
+
+            responses.append(resp)
+
+        log.info("Supplemented %d clips with prediction/action fields", supplemented)
         return responses

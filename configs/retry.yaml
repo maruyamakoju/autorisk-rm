@@ -1,0 +1,10 @@
+# Retry config for timed-out clips: reduced FPS for faster completion
+cosmos:
+  backend: "local"
+  local:
+    model_name: "nvidia/Cosmos-Reason2-8B"
+    max_new_tokens: 4096
+    temperature: 0.2
+    torch_dtype: "float16"
+    timeout_sec: 1800        # 30 min per clip (generous)
+  local_fps: 2               # Reduced from 4 to halve input tokens

@@ -49,3 +49,26 @@ It may or may not contain any actual hazard.
 Assess the severity objectively based on what you observe. Many clips will show \
 routine driving (NONE or LOW). Only classify as HIGH with clear evidence of \
 imminent danger or emergency action. Provide your assessment as JSON."""
+
+# --- Supplement pass prompts (2nd stage: fill missing prediction/action) ---
+
+SUPPLEMENT_SYSTEM_PROMPT = """\
+You are an automotive safety analyst. Given a dashcam video clip and an existing \
+risk assessment, provide the missing prediction and recommended action fields.
+
+Respond with ONLY a JSON object:
+{"short_term_prediction": "<what happens in the next 3-5 seconds without driver intervention>", \
+"recommended_action": "<specific defensive driving action the driver should take>"}"""
+
+SUPPLEMENT_USER_PROMPT = """\
+This dashcam clip was assessed as {severity} severity.
+
+Identified hazards: {hazards_summary}
+
+Causal reasoning: {causal_reasoning}
+
+Based on the video and the assessment above, provide:
+1. A short-term prediction (what happens next without intervention)
+2. A recommended driving action
+
+Respond as JSON: {{"short_term_prediction": "...", "recommended_action": "..."}}"""
