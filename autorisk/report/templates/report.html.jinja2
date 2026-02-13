@@ -6,6 +6,8 @@
 <title>{{ title }}</title>
 <style>
   :root {
+    --nvidia: #76b900;
+    --nvidia-dark: #1a1a2e;
     --high: #dc3545;
     --medium: #fd7e14;
     --low: #ffc107;
@@ -21,14 +23,105 @@
     background: var(--bg);
     color: var(--text);
     line-height: 1.6;
-    padding: 2rem;
+  }
+
+  /* Hero Banner */
+  .hero {
+    background: linear-gradient(135deg, var(--nvidia-dark) 0%, #16213e 100%);
+    color: white;
+    padding: 2.5rem 2rem;
+    margin-bottom: 2rem;
+  }
+  .hero-inner {
     max-width: 1200px;
     margin: 0 auto;
   }
-  h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+  .hero h1 {
+    font-size: 2rem;
+    margin-bottom: 0.3rem;
+  }
+  .hero .subtitle {
+    color: var(--nvidia);
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+  .hero .meta {
+    color: #a0aec0;
+    font-size: 0.9rem;
+  }
+
+  /* Pipeline Diagram */
+  .pipeline-section {
+    max-width: 1200px;
+    margin: 0 auto 2rem;
+    padding: 0 2rem;
+  }
+  .pipeline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 1.5rem;
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    overflow-x: auto;
+  }
+  .pipeline-step {
+    text-align: center;
+    padding: 1rem 1.2rem;
+    border-radius: 8px;
+    min-width: 140px;
+    position: relative;
+  }
+  .pipeline-step.mining {
+    background: #e3f2fd;
+    border: 2px solid #1976d2;
+  }
+  .pipeline-step.cosmos {
+    background: #e8f5e9;
+    border: 2px solid var(--nvidia);
+  }
+  .pipeline-step.eval {
+    background: #fff3e0;
+    border: 2px solid #f57c00;
+  }
+  .pipeline-step .step-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.3rem;
+  }
+  .pipeline-step.mining .step-label { color: #1976d2; }
+  .pipeline-step.cosmos .step-label { color: #2e7d32; }
+  .pipeline-step.eval .step-label { color: #f57c00; }
+  .pipeline-step .step-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 0.2rem;
+  }
+  .pipeline-step .step-detail {
+    font-size: 0.72rem;
+    color: #6c757d;
+  }
+  .pipeline-arrow {
+    font-size: 1.5rem;
+    color: #adb5bd;
+    padding: 0 0.3rem;
+    flex-shrink: 0;
+  }
+
+  /* Main content */
+  .content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem 2rem;
+  }
   h2 { font-size: 1.4rem; margin: 2rem 0 1rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; }
   h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
-  .meta { color: #6c757d; margin-bottom: 2rem; }
+
   .summary-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -49,6 +142,8 @@
   .summary-card.none { border-color: var(--none); }
   .summary-card .count { font-size: 2rem; font-weight: 700; }
   .summary-card .label { font-size: 0.85rem; color: #6c757d; text-transform: uppercase; }
+
+  /* Clip cards */
   .card {
     background: var(--card-bg);
     border-radius: 8px;
@@ -61,6 +156,29 @@
   .card.medium { border-left-color: var(--medium); }
   .card.low { border-left-color: var(--low); }
   .card.none { border-left-color: var(--none); }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.8rem;
+  }
+  .cosmos-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: var(--nvidia-dark);
+    color: var(--nvidia);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+  .cosmos-tag::before {
+    content: "\25C6";
+    font-size: 0.6rem;
+  }
   .badge {
     display: inline-block;
     padding: 0.2rem 0.6rem;
@@ -78,6 +196,25 @@
   .hazard-list { list-style: none; padding-left: 1rem; }
   .hazard-list li { margin: 0.3rem 0; }
   .evidence-list { list-style: disc; padding-left: 1.5rem; }
+
+  /* Cosmos output fields */
+  .cosmos-output {
+    background: #f0faf0;
+    border: 1px solid #c8e6c9;
+    border-radius: 6px;
+    padding: 0.8rem 1rem;
+    margin-top: 0.8rem;
+  }
+  .cosmos-output-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #2e7d32;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.4rem;
+  }
+
+  /* Metrics */
   table {
     width: 100%;
     border-collapse: collapse;
@@ -104,17 +241,121 @@
     text-align: center;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   }
-  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); color: #6c757d; font-size: 0.85rem; }
+
+  /* Ablation visual comparison */
+  .ablation-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 1.5rem 0;
+  }
+  .ablation-card {
+    background: var(--card-bg);
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .ablation-card.baseline {
+    border-top: 3px solid #adb5bd;
+  }
+  .ablation-card.cosmos {
+    border-top: 3px solid var(--nvidia);
+  }
+  .ablation-card h4 {
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+  }
+  .ablation-card .ab-metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .ablation-card .ab-metric:last-child { border-bottom: none; }
+  .ab-bar-wrap {
+    width: 60%;
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .ab-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s;
+  }
+  .baseline .ab-bar { background: #adb5bd; }
+  .cosmos .ab-bar { background: var(--nvidia); }
+
+  footer {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem 2rem;
+    border-top: 1px solid var(--border);
+    color: #6c757d;
+    font-size: 0.85rem;
+  }
+
+  @media (max-width: 768px) {
+    .pipeline { flex-direction: column; }
+    .pipeline-arrow { transform: rotate(90deg); }
+    .ablation-compare { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
 
-<h1>{{ title }}</h1>
-<p class="meta">
-  Generated: {{ generated_at }}
-  {% if video_name %}| Video: {{ video_name }}{% endif %}
-  | Total candidates: {{ total_candidates }}
-</p>
+<!-- Hero Banner -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="subtitle">Powered by NVIDIA Cosmos Reason 2 (8B)</div>
+    <h1>{{ title }}</h1>
+    <p class="meta">
+      {{ generated_at }}
+      {% if video_name %} &middot; {{ video_name }}{% endif %}
+      &middot; {{ total_candidates }} clips analyzed
+      &middot; Local GPU inference (float16)
+    </p>
+  </div>
+</div>
+
+<!-- Pipeline Diagram -->
+<div class="pipeline-section">
+  <div class="pipeline">
+    <div class="pipeline-step mining">
+      <div class="step-label">B1 Mining</div>
+      <div class="step-title">Candidate Extraction</div>
+      <div class="step-detail">Audio + Optical Flow + YOLO Proximity</div>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-step mining">
+      <div class="step-label">Signal Fusion</div>
+      <div class="step-title">Peak Detection</div>
+      <div class="step-detail">Weighted fusion &rarr; Top-{{ total_candidates }}</div>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-step cosmos">
+      <div class="step-label">B2 Cosmos Reason 2</div>
+      <div class="step-title">Video Understanding</div>
+      <div class="step-detail">Severity &middot; Hazards &middot; Causal Reasoning</div>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-step cosmos">
+      <div class="step-label">2-Stage Supplement</div>
+      <div class="step-title">Prediction + Action</div>
+      <div class="step-detail">Fill missing fields for MED/HIGH</div>
+    </div>
+    <div class="pipeline-arrow">&rarr;</div>
+    <div class="pipeline-step eval">
+      <div class="step-label">B3-B5</div>
+      <div class="step-title">Rank &middot; Eval &middot; Ablation</div>
+      <div class="step-detail">Accuracy &middot; F1 &middot; Checklist</div>
+    </div>
+  </div>
+</div>
+
+<div class="content">
 
 <h2>Severity Summary</h2>
 <div class="summary-grid">
@@ -126,21 +367,24 @@
   {% endfor %}
 </div>
 
-<h2>Top {{ examples|length }} Risk Events</h2>
+<h2>Top {{ examples|length }} Risk Events &mdash; Cosmos Reason 2 Analysis</h2>
 {% for ex in examples %}
 <div class="card {{ ex.severity|lower }}">
-  <h3>
-    #{{ ex.rank }}
-    <span class="badge {{ ex.severity|lower }}">{{ ex.severity }}</span>
-    <span style="font-weight: normal; font-size: 0.9rem; color: #6c757d;">
-      confidence: {{ "%.2f"|format(ex.confidence) }}
-    </span>
-  </h3>
+  <div class="card-header">
+    <h3 style="margin: 0;">
+      #{{ ex.rank }}
+      <span class="badge {{ ex.severity|lower }}">{{ ex.severity }}</span>
+      <span style="font-weight: normal; font-size: 0.9rem; color: #6c757d;">
+        confidence: {{ "%.2f"|format(ex.confidence) }}
+      </span>
+    </h3>
+    <span class="cosmos-tag">Cosmos Reason 2</span>
+  </div>
 
   <div class="detail">
     <span class="detail-label">Clip:</span> {{ ex.clip_name }}
     | <span class="detail-label">Time:</span> {{ "%.1f"|format(ex.peak_time) }}s
-    | <span class="detail-label">Score:</span> {{ "%.3f"|format(ex.fused_score) }}
+    | <span class="detail-label">Mining Score:</span> {{ "%.3f"|format(ex.fused_score) }}
   </div>
 
   {% if ex.hazards %}
@@ -148,28 +392,31 @@
     <span class="detail-label">Hazards:</span>
     <ul class="hazard-list">
       {% for h in ex.hazards %}
-      <li>{{ h.type }} — {{ h.actors }} ({{ h.spatial }})</li>
+      <li>{{ h.type }} &mdash; {{ h.actors }} ({{ h.spatial }})</li>
       {% endfor %}
     </ul>
   </div>
   {% endif %}
 
-  <div class="detail">
-    <span class="detail-label">Causal Reasoning:</span> {{ ex.causal_reasoning|truncate(500) }}
+  <div class="cosmos-output">
+    <div class="cosmos-output-label">Cosmos Reason 2 &mdash; Structured Output</div>
+    <div class="detail">
+      <span class="detail-label">Causal Reasoning:</span> {{ ex.causal_reasoning|truncate(500) }}
+    </div>
+    {% if ex.prediction %}
+    <div class="detail">
+      <span class="detail-label">Short-term Prediction:</span> {{ ex.prediction|truncate(300) }}
+    </div>
+    {% endif %}
+    {% if ex.action %}
+    <div class="detail">
+      <span class="detail-label">Recommended Action:</span> {{ ex.action|truncate(300) }}
+    </div>
+    {% endif %}
   </div>
-  {% if ex.prediction %}
-  <div class="detail">
-    <span class="detail-label">Prediction:</span> {{ ex.prediction|truncate(300) }}
-  </div>
-  {% endif %}
-  {% if ex.action %}
-  <div class="detail">
-    <span class="detail-label">Recommended Action:</span> {{ ex.action|truncate(300) }}
-  </div>
-  {% endif %}
 
   {% if ex.evidence %}
-  <div class="detail">
+  <div class="detail" style="margin-top: 0.5rem;">
     <span class="detail-label">Evidence:</span>
     <ul class="evidence-list">
       {% for e in ex.evidence %}
@@ -224,31 +471,58 @@
 {% endif %}
 
 {% if ablation %}
-<h2>Ablation Study</h2>
-<table>
-  <tr>
-    <th>Mode</th>
-    <th>Description</th>
-    <th>Candidates</th>
-    <th>Accuracy</th>
-    <th>Macro-F1</th>
-    <th>Checklist</th>
-  </tr>
+<h2>Ablation Study &mdash; Why Cosmos Matters</h2>
+<p style="color: #6c757d; margin-bottom: 1rem;">
+  Comparing a simple mining-score threshold baseline against full Cosmos Reason 2 video inference.
+</p>
+<div class="ablation-compare">
   {% for ab in ablation %}
-  <tr>
-    <td>{{ ab.mode }}</td>
-    <td>{{ ab.description }}</td>
-    <td>{{ ab.n_candidates }}</td>
-    <td>{{ "%.3f"|format(ab.accuracy) }}</td>
-    <td>{{ "%.3f"|format(ab.macro_f1) }}</td>
-    <td>{{ "%.2f"|format(ab.checklist_mean) }}</td>
-  </tr>
+  <div class="ablation-card {{ 'cosmos' if 'cosmos' in ab.mode else 'baseline' }}">
+    <h4>
+      {% if 'cosmos' in ab.mode %}
+        Cosmos Reason 2 (Full Pipeline)
+      {% else %}
+        Baseline (Score Threshold Only)
+      {% endif %}
+    </h4>
+    <div class="ab-metric">
+      <span>Accuracy</span>
+      <span style="font-weight:700">{{ "%.1f"|format(ab.accuracy * 100) }}%</span>
+    </div>
+    <div class="ab-metric">
+      <span>Macro-F1</span>
+      <div class="ab-bar-wrap">
+        <div class="ab-bar" style="width: {{ (ab.macro_f1 * 100)|round }}%"></div>
+      </div>
+      <span style="font-weight:700">{{ "%.3f"|format(ab.macro_f1) }}</span>
+    </div>
+    <div class="ab-metric">
+      <span>Checklist</span>
+      <div class="ab-bar-wrap">
+        <div class="ab-bar" style="width: {{ (ab.checklist_mean / 5 * 100)|round }}%"></div>
+      </div>
+      <span style="font-weight:700">{{ "%.1f"|format(ab.checklist_mean) }}/5</span>
+    </div>
+    {% if 'cosmos' not in ab.mode %}
+    <p style="color: #6c757d; font-size: 0.8rem; margin-top: 0.8rem;">
+      No causal reasoning, prediction, or action &mdash; just a severity label from mining scores.
+    </p>
+    {% else %}
+    <p style="color: #2e7d32; font-size: 0.8rem; margin-top: 0.8rem;">
+      Structured JSON with hazards, causal reasoning, short-term prediction, and recommended action.
+    </p>
+    {% endif %}
+  </div>
   {% endfor %}
-</table>
+</div>
 {% endif %}
 
+</div>
+
 <footer>
-  AutoRisk-RM v0.1.0 — Powered by NVIDIA Cosmos Reason 2
+  AutoRisk-RM v0.1.0 &mdash;
+  Video analysis by <strong>NVIDIA Cosmos Reason 2</strong> (nvidia/Cosmos-Reason2-8B, Qwen3VL backbone, float16)
+  &middot; Local GPU inference
 </footer>
 
 </body>
