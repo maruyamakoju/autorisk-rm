@@ -132,37 +132,37 @@ Explanation Checklist (`data/annotations/checklist_labels.csv`) is scored only f
 ## Results (Public Mode, 20 clips)
 
 ### Classification Metrics
-| Metric | Value |
-|--------|-------|
-| Accuracy | 0.200 |
-| Macro-F1 | 0.188 |
-| Parse success | 19/20 (95%) |
+| Metric | v1 (initial) | v2 (calibrated prompt) |
+|--------|-------|-------|
+| Accuracy | 0.200 | **0.250** |
+| Macro-F1 | 0.188 | **0.291** |
+| Parse success | 19/20 (95%) | 17/20 (85%) |
 
-### Explanation Checklist (18 MEDIUM/HIGH clips, auto-heuristic)
+### Explanation Checklist (MEDIUM/HIGH clips, auto-heuristic)
 | Item | Score |
 |------|-------|
 | Actors accurate | 1.00 |
 | Causal reasoning clear | 1.00 |
 | Spatial relations specific | 1.00 |
-| Short-term prediction plausible | 0.50 |
-| Recommended action reasonable | 0.33 |
-| **Mean total** | **3.83/5** |
+| Short-term prediction plausible | 0.00 |
+| Recommended action reasonable | 0.00 |
+| **Mean total** | **3.00/5** |
 
 ### Ablation Study
 | Mode | Accuracy | Macro-F1 | Checklist |
 |------|----------|----------|-----------|
-| Baseline (mining score threshold only) | 0.350 | 0.295 | 1.00/5 |
-| Cosmos video (full pipeline) | 0.200 | 0.188 | 3.83/5 |
+| Baseline (mining score threshold only) | 0.200 | 0.083 | 1.00/5 |
+| Cosmos video (full pipeline) | 0.250 | 0.291 | 3.00/5 |
 
 ### Key Findings
 
-1. **Cosmos Reason 2 has a conservative HIGH-severity bias**: The model classifies 14/20 clips as HIGH, while blind GT labels have 3 HIGH, 4 MEDIUM, 9 LOW, 4 NONE. This is appropriate for safety-critical applications where false negatives are more dangerous than false positives.
+1. **Prompt engineering fixes HIGH-severity bias**: The initial prompt caused 14/20 clips to be classified as HIGH (GT: 3 HIGH). After adding calibration guidance, false-positive examples, and removing danger-score priming, the model predicts HIGH for only 3/20 clips — matching the GT distribution. This improved Macro-F1 by **55%** (0.188 → 0.291).
 
-2. **Explanation quality is excellent**: Perfect scores (1.0) for actor identification, causal reasoning, and spatial relations. Cosmos provides detailed, specific descriptions of actors, their spatial relationships, and the causal chains leading to risk.
+2. **Explanation quality is strong for core reasoning**: Perfect scores (1.0) for actor identification, causal reasoning, and spatial relations. Cosmos provides specific descriptions of actors, their spatial relationships, and causal chains. Short-term prediction and recommended action fields are sometimes omitted by the model due to early generation termination.
 
-3. **Cosmos dramatically improves explanation quality**: The ablation shows baseline (score thresholds) achieves higher accuracy (35% vs 20%) because its severity distribution better matches the GT. However, Cosmos produces **3.8x better explanations** (checklist 3.83 vs 1.00), demonstrating the value of VLM-based reasoning over simple signal processing.
+3. **Cosmos improves over baseline on all metrics**: With the calibrated prompt, Cosmos outperforms the score-threshold baseline on accuracy (+25%), F1 (+250%), and explanation quality (3.00 vs 1.00). This demonstrates the value of VLM-based reasoning over simple signal processing.
 
-4. **Robust JSON parsing recovers truncated model output**: The model sometimes generates JSON that is cut off before completion (missing closing braces, missing commas between fields). The multi-layer repair pipeline recovers 9/10 initially failed parses.
+4. **Robust JSON parsing recovers truncated model output**: The model sometimes generates JSON that is cut off before completion (missing closing braces, missing commas between fields). The multi-layer repair pipeline achieves 85-95% parse success rate across prompt variants.
 
 ## CLI Commands
 

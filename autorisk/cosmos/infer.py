@@ -353,7 +353,7 @@ class CosmosInferenceEngine:
                 error=f"Clip not found: {clip_path}",
             )
 
-        user_prompt = USER_PROMPT.format(fused_score=request.fused_score)
+        user_prompt = USER_PROMPT
 
         try:
             video_b64 = self.client.encode_video_base64(clip_path)
