@@ -155,14 +155,18 @@
   {% endif %}
 
   <div class="detail">
-    <span class="detail-label">Causal Reasoning:</span> {{ ex.causal_reasoning }}
+    <span class="detail-label">Causal Reasoning:</span> {{ ex.causal_reasoning|truncate(500) }}
   </div>
+  {% if ex.prediction %}
   <div class="detail">
-    <span class="detail-label">Prediction:</span> {{ ex.prediction }}
+    <span class="detail-label">Prediction:</span> {{ ex.prediction|truncate(300) }}
   </div>
+  {% endif %}
+  {% if ex.action %}
   <div class="detail">
-    <span class="detail-label">Recommended Action:</span> {{ ex.action }}
+    <span class="detail-label">Recommended Action:</span> {{ ex.action|truncate(300) }}
   </div>
+  {% endif %}
 
   {% if ex.evidence %}
   <div class="detail">
