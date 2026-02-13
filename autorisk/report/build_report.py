@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime
 from pathlib import Path
 
+import cv2
 from jinja2 import Environment, FileSystemLoader
 from omegaconf import DictConfig
 
@@ -14,6 +16,25 @@ from autorisk.eval.evaluator import EvalReport
 from autorisk.utils.logger import setup_logger
 
 log = setup_logger(__name__)
+
+
+def _extract_thumbnail_b64(clip_path: Path, width: int = 320) -> str:
+    """Extract middle frame from clip and return as base64 JPEG."""
+    try:
+        cap = cv2.VideoCapture(str(clip_path))
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, total // 2)
+        ret, frame = cap.read()
+        cap.release()
+        if not ret:
+            return ""
+        h, w = frame.shape[:2]
+        new_h = int(h * width / w)
+        frame = cv2.resize(frame, (width, new_h))
+        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        return base64.b64encode(buf).decode("ascii")
+    except Exception:
+        return ""
 
 
 class ReportBuilder:
@@ -57,10 +78,22 @@ class ReportBuilder:
         examples = []
         for i, r in enumerate(top_responses, 1):
             a = r.assessment
+            clip_abs = Path(r.request.clip_path) if r.request.clip_path else None
+            clip_rel = ""
+            thumb_b64 = ""
+            if clip_abs and clip_abs.exists():
+                try:
+                    clip_rel = clip_abs.relative_to(output_dir).as_posix()
+                except ValueError:
+                    clip_rel = clip_abs.as_posix()
+                thumb_b64 = _extract_thumbnail_b64(clip_abs)
+
             examples.append({
                 "rank": i,
                 "clip_path": r.request.clip_path,
-                "clip_name": Path(r.request.clip_path).name if r.request.clip_path else "",
+                "clip_rel": clip_rel,
+                "clip_name": clip_abs.name if clip_abs else "",
+                "thumbnail_b64": thumb_b64,
                 "peak_time": r.request.peak_time_sec,
                 "fused_score": r.request.fused_score,
                 "severity": a.severity,
@@ -79,6 +112,15 @@ class ReportBuilder:
                 "confidence": a.confidence,
             })
 
+        # Timeline data (all responses, not just top-N)
+        timeline = []
+        for r in responses:
+            timeline.append({
+                "time": r.request.peak_time_sec,
+                "severity": r.assessment.severity,
+            })
+        timeline.sort(key=lambda x: x["time"])
+
         context = {
             "title": "AutoRisk-RM Analysis Report",
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -86,6 +128,7 @@ class ReportBuilder:
             "total_candidates": len(responses),
             "examples": examples,
             "severity_summary": self._severity_summary(responses),
+            "timeline": timeline,
         }
 
         if eval_report is not None:

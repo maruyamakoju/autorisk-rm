@@ -288,6 +288,90 @@
   .baseline .ab-bar { background: #adb5bd; }
   .cosmos .ab-bar { background: var(--nvidia); }
 
+  /* Timeline */
+  .timeline-wrap {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .timeline-bar {
+    position: relative;
+    height: 32px;
+    background: #e9ecef;
+    border-radius: 6px;
+    margin-top: 0.5rem;
+    overflow: visible;
+  }
+  .timeline-marker {
+    position: absolute;
+    top: -2px;
+    width: 14px;
+    height: 36px;
+    border-radius: 3px;
+    transform: translateX(-50%);
+    cursor: default;
+    opacity: 0.9;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  .timeline-marker.high { background: var(--high); }
+  .timeline-marker.medium { background: var(--medium); }
+  .timeline-marker.low { background: var(--low); }
+  .timeline-marker.none { background: var(--none); }
+  .timeline-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 0.3rem;
+  }
+  .timeline-legend {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+  }
+  .timeline-legend span {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+  }
+
+  /* Video in card */
+  .card-body {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 1.2rem;
+    margin-top: 0.8rem;
+  }
+  .card-video {
+    border-radius: 6px;
+    overflow: hidden;
+    background: #000;
+    position: relative;
+  }
+  .card-video video {
+    width: 100%;
+    display: block;
+    border-radius: 6px;
+  }
+  .card-video img {
+    width: 100%;
+    display: block;
+    border-radius: 6px;
+  }
+  .card-analysis {
+    min-width: 0;
+  }
+
   footer {
     max-width: 1200px;
     margin: 0 auto;
@@ -301,6 +385,7 @@
     .pipeline { flex-direction: column; }
     .pipeline-arrow { transform: rotate(90deg); }
     .ablation-compare { grid-template-columns: 1fr; }
+    .card-body { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -357,6 +442,37 @@
 
 <div class="content">
 
+<!-- Detection Timeline -->
+{% if timeline %}
+<h2>Detection Timeline &mdash; Danger Moments in Source Video</h2>
+<div class="timeline-wrap">
+  <div style="font-size: 0.85rem; color: #495057; margin-bottom: 0.3rem;">
+    Each marker shows where Cosmos Reason 2 detected a risk event in the original recording.
+  </div>
+  <div class="timeline-bar">
+    {% set max_time = timeline[-1].time if timeline[-1].time > 0 else 302 %}
+    {% for t in timeline %}
+    <div class="timeline-marker {{ t.severity|lower }}"
+         style="left: {{ (t.time / max_time * 100)|round(1) }}%"
+         title="{{ t.severity }} at {{ t.time|round(0)|int }}s"></div>
+    {% endfor %}
+  </div>
+  <div class="timeline-labels">
+    <span>0:00</span>
+    <span>{{ (max_time / 4)|round(0)|int }}s</span>
+    <span>{{ (max_time / 2)|round(0)|int }}s</span>
+    <span>{{ (max_time * 3 / 4)|round(0)|int }}s</span>
+    <span>{{ max_time|round(0)|int }}s</span>
+  </div>
+  <div class="timeline-legend">
+    <span><span class="legend-dot" style="background:var(--high)"></span> HIGH</span>
+    <span><span class="legend-dot" style="background:var(--medium)"></span> MEDIUM</span>
+    <span><span class="legend-dot" style="background:var(--low)"></span> LOW</span>
+    <span><span class="legend-dot" style="background:var(--none)"></span> NONE</span>
+  </div>
+</div>
+{% endif %}
+
 <h2>Severity Summary</h2>
 <div class="summary-grid">
   {% for sev, count in severity_summary.items() %}
@@ -387,44 +503,61 @@
     {% endif %}
   </div>
 
-  {% if ex.hazards %}
-  <div class="detail">
-    <span class="detail-label">Hazards:</span>
-    <ul class="hazard-list">
-      {% for h in ex.hazards %}
-      <li>{{ h.type }} &mdash; {{ h.actors }} ({{ h.spatial }})</li>
-      {% endfor %}
-    </ul>
-  </div>
-  {% endif %}
+  <div class="card-body">
+    <!-- Video / Thumbnail -->
+    <div class="card-video">
+      {% if ex.clip_rel %}
+      <video controls preload="metadata"
+             {% if ex.thumbnail_b64 %}poster="data:image/jpeg;base64,{{ ex.thumbnail_b64 }}"{% endif %}>
+        <source src="{{ ex.clip_rel }}" type="video/mp4">
+      </video>
+      {% elif ex.thumbnail_b64 %}
+      <img src="data:image/jpeg;base64,{{ ex.thumbnail_b64 }}" alt="Frame from {{ ex.clip_name }}">
+      {% endif %}
+    </div>
 
-  <div class="cosmos-output">
-    <div class="cosmos-output-label">Cosmos Reason 2 &mdash; Structured Output</div>
-    <div class="detail">
-      <span class="detail-label">Causal Reasoning:</span> {{ ex.causal_reasoning|truncate(500) }}
-    </div>
-    {% if ex.prediction %}
-    <div class="detail">
-      <span class="detail-label">Short-term Prediction:</span> {{ ex.prediction|truncate(300) }}
-    </div>
-    {% endif %}
-    {% if ex.action %}
-    <div class="detail">
-      <span class="detail-label">Recommended Action:</span> {{ ex.action|truncate(300) }}
-    </div>
-    {% endif %}
-  </div>
+    <!-- Analysis -->
+    <div class="card-analysis">
+      {% if ex.hazards %}
+      <div class="detail">
+        <span class="detail-label">Hazards:</span>
+        <ul class="hazard-list">
+          {% for h in ex.hazards %}
+          <li>{{ h.type }} &mdash; {{ h.actors }} ({{ h.spatial }})</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
 
-  {% if ex.evidence %}
-  <div class="detail" style="margin-top: 0.5rem;">
-    <span class="detail-label">Evidence:</span>
-    <ul class="evidence-list">
-      {% for e in ex.evidence %}
-      <li>{{ e }}</li>
-      {% endfor %}
-    </ul>
+      <div class="cosmos-output">
+        <div class="cosmos-output-label">Cosmos Reason 2 &mdash; Structured Output</div>
+        <div class="detail">
+          <span class="detail-label">Causal Reasoning:</span> {{ ex.causal_reasoning|truncate(500) }}
+        </div>
+        {% if ex.prediction %}
+        <div class="detail">
+          <span class="detail-label">Short-term Prediction:</span> {{ ex.prediction|truncate(300) }}
+        </div>
+        {% endif %}
+        {% if ex.action %}
+        <div class="detail">
+          <span class="detail-label">Recommended Action:</span> {{ ex.action|truncate(300) }}
+        </div>
+        {% endif %}
+      </div>
+
+      {% if ex.evidence %}
+      <div class="detail" style="margin-top: 0.5rem;">
+        <span class="detail-label">Evidence:</span>
+        <ul class="evidence-list">
+          {% for e in ex.evidence %}
+          <li>{{ e }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </div>
   </div>
-  {% endif %}
 </div>
 {% endfor %}
 
