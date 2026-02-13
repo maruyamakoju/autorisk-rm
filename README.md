@@ -103,6 +103,8 @@ python scripts/download_public_data.py
 
 Source: [UK Dash Camera Compilation #1](https://www.youtube.com/watch?v=i7HspkH7aT4) by JA Dashcam UK (302s, 640x360, 30 FPS)
 
+**Data usage note**: The source video is publicly available on YouTube under standard YouTube license. It is **not redistributed** in this repository — users download it directly from the original source via `yt-dlp` or manual download. Only the extracted 10-second analysis clips (transformative, analytical use) and ground-truth annotations (original work) are used for evaluation. No video data is included in the git repository.
+
 ### Step 2: Run pipeline
 
 ```bash
@@ -151,7 +153,15 @@ python -m autorisk.cli run \
 
 ## Ground Truth Labeling
 
-GT severity labels in `data/annotations/gt_labels.csv` were assigned **blind to model output** (before reviewing Cosmos predictions) using the following criteria:
+GT severity labels in `data/annotations/gt_labels.csv` were assigned **blind to model output** using the following procedure:
+
+1. **Mining first**: Run `autorisk mine` to extract 20 candidate clips from the dashcam video
+2. **Watch clips only**: Review each 10-second clip in a video player (VLC) without running Cosmos inference
+3. **Assign severity**: Label each clip using the criteria below, based solely on visual content
+4. **Freeze GT**: Commit `gt_labels.csv` to the repository before running any inference
+5. **Run inference**: Execute Cosmos analysis and compare predictions against the frozen GT
+
+This blind-labeling protocol ensures GT labels are **not influenced by model predictions**, providing an honest evaluation baseline.
 
 | Severity | Definition |
 |----------|-----------|
@@ -160,7 +170,7 @@ GT severity labels in `data/annotations/gt_labels.csv` were assigned **blind to 
 | **MEDIUM** | Evasive action warranted (decelerate, maintain distance, yield) |
 | **HIGH** | Collision risk, emergency braking or swerving needed (close pass, cut-in, near-miss) |
 
-Explanation Checklist (`data/annotations/checklist_labels.csv`) is scored only for MEDIUM/HIGH clips, with 5 binary items evaluating the quality of Cosmos's reasoning.
+Explanation Checklist (`data/annotations/checklist_labels.csv`) is scored only for MEDIUM/HIGH clips, with 5 binary items evaluating the quality of Cosmos's reasoning. Checklist items are evaluated via auto-heuristic (checking for non-empty structured fields) to ensure reproducibility.
 
 ## Results (Public Mode, 20 clips)
 

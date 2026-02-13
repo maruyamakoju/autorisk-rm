@@ -374,9 +374,6 @@
     <h3 style="margin: 0;">
       #{{ ex.rank }}
       <span class="badge {{ ex.severity|lower }}">{{ ex.severity }}</span>
-      <span style="font-weight: normal; font-size: 0.9rem; color: #6c757d;">
-        confidence: {{ "%.2f"|format(ex.confidence) }}
-      </span>
     </h3>
     <span class="cosmos-tag">Cosmos Reason 2</span>
   </div>
@@ -385,6 +382,9 @@
     <span class="detail-label">Clip:</span> {{ ex.clip_name }}
     | <span class="detail-label">Time:</span> {{ "%.1f"|format(ex.peak_time) }}s
     | <span class="detail-label">Mining Score:</span> {{ "%.3f"|format(ex.fused_score) }}
+    {% if ex.confidence > 0 %}
+    | <span class="detail-label">Model Confidence:</span> {{ "%.0f"|format(ex.confidence * 100) }}%
+    {% endif %}
   </div>
 
   {% if ex.hazards %}
