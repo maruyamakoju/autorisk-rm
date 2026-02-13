@@ -206,7 +206,7 @@ Key insight: v1 classified 70% of clips as HIGH (GT: 15%). Calibration guidance 
 ### Ablation Study
 | Mode | Accuracy | Macro-F1 | Checklist |
 |------|----------|----------|-----------|
-| Baseline (mining score threshold only) | 0.200 | 0.083 | 1.00/5 |
+| Baseline (mining score threshold only) | 0.350 | 0.295 | 1.00/5 |
 | **Cosmos video (full pipeline)** | **0.350** | **0.346** | **5.00/5** |
 
 ### 2-Stage Inference Strategy
@@ -238,7 +238,7 @@ Result: Accurate classification (Stage 1) + Complete explanations (Stage 2) = 5.
 
 2. **2-stage inference recovers explanation completeness**: The calibrated prompt produces shorter outputs, dropping prediction/action fields. A lightweight 2nd-pass supplement (targeting only MEDIUM/HIGH clips with missing fields) recovers **perfect 5.00/5 checklist** without re-running full inference. This decouples classification accuracy from explanation quality.
 
-3. **Cosmos dramatically improves over baseline**: Cosmos outperforms the score-threshold baseline on accuracy (+75%), F1 (+317%), and explanation quality (5.00 vs 1.00). This demonstrates that VLM-based video understanding adds substantial value beyond simple signal processing.
+3. **Cosmos adds structured reasoning over baseline**: While the mining-score baseline achieves comparable accuracy (0.350), Cosmos provides dramatically richer outputs — perfect explanation quality (5.00 vs 1.00 checklist), better class balance (F1 0.346 vs 0.295), and actionable causal reasoning, predictions, and recommended actions that a simple threshold cannot produce.
 
 4. **Robust JSON parsing achieves 100% success**: Multi-layer repair pipeline (truncation repair, missing comma fix, trailing key cleanup, markdown fallback) plus reduced-FPS retry for stubborn clips achieves 20/20 parse success.
 
