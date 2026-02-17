@@ -186,9 +186,9 @@ jobs:
           export PACK_ZIP
           echo "PACK_ZIP=$PACK_ZIP"
 
-          python -m autorisk.cli audit-verify -p "$PACK_ZIP" --strict \
+          python -m autorisk.cli audit-verify -p "$PACK_ZIP" \
+            --profile audit-grade \
             --public-key-dir artifacts/ci_keys/trusted \
-            --require-signature --require-public-key --require-attestation \
             --json-out artifacts/verify_keyring.json
 
           python -m autorisk.cli audit-validate -p "$PACK_ZIP" --profile audit-grade --enforce --json-out artifacts/validate_report.json
@@ -241,10 +241,10 @@ jobs:
           assert str(packed_finalize.get("handoff_verifier_bundle_zip_sha256", "")) == ""
           PY
 
-          if python -m autorisk.cli audit-verify -p "$PACK_ZIP" --strict \
+          if python -m autorisk.cli audit-verify -p "$PACK_ZIP" \
+            --profile audit-grade \
             --public-key-dir artifacts/ci_keys/trusted \
-            --revocation-file artifacts/revoked_key_ids.txt \
-            --require-signature --require-public-key --require-attestation; then
+            --revocation-file artifacts/revoked_key_ids.txt; then
             echo "Expected revocation check to fail, but it passed."
             exit 1
           else

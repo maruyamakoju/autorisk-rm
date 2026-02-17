@@ -266,6 +266,15 @@ def _append_finalize_record_checks(
     if expected_checksums == "":
         expected_checksums = str(record.get("handoff_checksums_sha256", "")).strip()
 
+    if expected_bundle == "" or expected_checksums == "":
+        issues.append(
+            HandoffVerifyIssue(
+                kind="finalize_record_error",
+                path=path_label,
+                detail="handoff anchors missing; cannot bind verifier_bundle / handoff_checksums",
+            )
+        )
+
     _cmp(expected_bundle, "handoff_anchor_verifier_bundle_zip_sha256", _sha256_file(verifier_bundle_zip_path), "verifier_bundle.zip")
     _cmp(expected_checksums, "handoff_anchor_checksums_sha256", _sha256_file(checksums_path), HANDOFF_CHECKSUMS_FILENAME)
 
@@ -372,6 +381,7 @@ def _compare_handoff_finalize_copy(
 def verify_audit_handoff(
     handoff_dir: str | Path,
     *,
+    profile: str = "audit-grade",
     strict: bool = True,
     require_signature: bool = True,
     require_public_key: bool = True,
@@ -380,6 +390,16 @@ def verify_audit_handoff(
     compare_bundled_validate_report: bool = True,
 ) -> AuditHandoffVerifyResult:
     """Verify handoff checksums, then verify and validate bundled PACK.zip."""
+    require_attestation_key_match_signature = False
+    if str(profile).strip().lower() == "audit-grade":
+        strict = True
+        require_signature = True
+        require_public_key = True
+        require_attestation = True
+        validate_profile = "audit-grade"
+        compare_bundled_validate_report = True
+        require_attestation_key_match_signature = True
+
     handoff_dir_path = Path(handoff_dir).expanduser().resolve()
     if not handoff_dir_path.exists() or not handoff_dir_path.is_dir():
         raise FileNotFoundError(f"handoff directory not found: {handoff_dir_path}")
@@ -526,6 +546,7 @@ def verify_audit_handoff(
                 require_signature=require_signature,
                 require_public_key=require_public_key,
                 require_attestation=require_attestation,
+                require_attestation_key_match_signature=require_attestation_key_match_signature,
                 revoked_key_ids=revoked,
             )
             audit_verify_ok = verify_res.ok

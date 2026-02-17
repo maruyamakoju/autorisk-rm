@@ -381,6 +381,42 @@ def _verify_attestation(
     return attestation_present, True, key_id, key_source
 
 
+def _enforce_attestation_key_match_signature(
+    *,
+    require_attestation_key_match_signature: bool,
+    signature_verified: bool | None,
+    attestation_verified: bool | None,
+    signature_key_id: str,
+    attestation_key_id: str,
+    attestation_path: str,
+    issues: list[VerifyIssue],
+) -> None:
+    if not require_attestation_key_match_signature:
+        return
+    if signature_verified is not True or attestation_verified is not True:
+        return
+
+    sig_key = str(signature_key_id or "").strip().lower()
+    att_key = str(attestation_key_id or "").strip().lower()
+    if sig_key == "" or att_key == "":
+        issues.append(
+            VerifyIssue(
+                kind="attestation_error",
+                path=attestation_path,
+                detail="missing key_id for signature/attestation key-match check",
+            )
+        )
+        return
+    if sig_key != att_key:
+        issues.append(
+            VerifyIssue(
+                kind="attestation_error",
+                path=attestation_path,
+                detail="attestation key_id must match signature key_id in audit-grade mode",
+            )
+        )
+
+
 def _verify_dir(
     pack_dir: Path,
     *,
@@ -390,6 +426,7 @@ def _verify_dir(
     require_signature: bool = False,
     require_public_key: bool = False,
     require_attestation: bool = False,
+    require_attestation_key_match_signature: bool = False,
     trust_embedded_public_key: bool = False,
     revoked_key_ids: set[str] | None = None,
 ) -> AuditVerifyResult:
@@ -535,6 +572,15 @@ def _verify_dir(
         revoked_key_ids={s.strip().lower() for s in (revoked_key_ids or set()) if s.strip() != ""},
         issues=issues,
     )
+    _enforce_attestation_key_match_signature(
+        require_attestation_key_match_signature=require_attestation_key_match_signature,
+        signature_verified=signature_verified,
+        attestation_verified=attestation_verified,
+        signature_key_id=signature_key_id,
+        attestation_key_id=attestation_key_id,
+        attestation_path=str(attestation_path),
+        issues=issues,
+    )
 
     if not strict:
         issues = [i for i in issues if i.kind != "unexpected_file"]
@@ -571,6 +617,7 @@ def _verify_zip(
     require_signature: bool = False,
     require_public_key: bool = False,
     require_attestation: bool = False,
+    require_attestation_key_match_signature: bool = False,
     trust_embedded_public_key: bool = False,
     revoked_key_ids: set[str] | None = None,
 ) -> AuditVerifyResult:
@@ -754,6 +801,15 @@ def _verify_zip(
             revoked_key_ids={s.strip().lower() for s in (revoked_key_ids or set()) if s.strip() != ""},
             issues=issues,
         )
+        _enforce_attestation_key_match_signature(
+            require_attestation_key_match_signature=require_attestation_key_match_signature,
+            signature_verified=signature_verified,
+            attestation_verified=attestation_verified,
+            signature_key_id=signature_key_id,
+            attestation_key_id=attestation_key_id,
+            attestation_path=f"{zip_path}!{attestation_name}",
+            issues=issues,
+        )
 
     if not strict:
         issues = [i for i in issues if i.kind != "unexpected_file"]
@@ -791,6 +847,7 @@ def verify_audit_pack(
     require_signature: bool = False,
     require_public_key: bool = False,
     require_attestation: bool = False,
+    require_attestation_key_match_signature: bool = False,
     trust_embedded_public_key: bool = False,
     revoked_key_ids: set[str] | None = None,
 ) -> AuditVerifyResult:
@@ -805,6 +862,7 @@ def verify_audit_pack(
             require_signature=require_signature,
             require_public_key=require_public_key,
             require_attestation=require_attestation,
+            require_attestation_key_match_signature=require_attestation_key_match_signature,
             trust_embedded_public_key=trust_embedded_public_key,
             revoked_key_ids=revoked_key_ids,
         )
@@ -817,6 +875,7 @@ def verify_audit_pack(
             require_signature=require_signature,
             require_public_key=require_public_key,
             require_attestation=require_attestation,
+            require_attestation_key_match_signature=require_attestation_key_match_signature,
             trust_embedded_public_key=trust_embedded_public_key,
             revoked_key_ids=revoked_key_ids,
         )

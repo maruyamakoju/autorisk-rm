@@ -321,3 +321,40 @@ def test_verify_audit_handoff_rejects_pack_zip_row_in_handoff_checksums(sample_r
         and "must not include" in issue.detail
         for issue in result.issues
     )
+
+
+def test_audit_handoff_verify_cli_profile_audit_grade_fails_without_trusted_key(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
+    handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
+    bundle_zip = handoff_dir / "verifier_bundle.zip"
+    _rewrite_zip_member(
+        bundle_zip,
+        member_suffix="keys/trusted/active.pem",
+        mutate_bytes=lambda b: b,
+        delete=True,
+    )
+
+    out_json = tmp_path / "handoff_verify_profile.json"
+    runner = CliRunner()
+    cli_res = runner.invoke(
+        cli,
+        [
+            "audit-handoff-verify",
+            "-d",
+            str(handoff_dir),
+            "--profile",
+            "audit-grade",
+            "--enforce",
+            "--json-out",
+            str(out_json),
+        ],
+    )
+    assert cli_res.exit_code == 2
+    payload = json.loads(out_json.read_text(encoding="utf-8"))
+    assert payload["ok"] is False
+    assert any(
+        issue.get("path", "").endswith("verifier_bundle/keys/trusted")
+        or "no --public-key/--public-key-dir was provided" in issue.get("detail", "")
+        for issue in payload.get("issues", [])
+    )

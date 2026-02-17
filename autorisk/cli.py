@@ -836,6 +836,13 @@ def audit_attest(
 
 @cli.command("audit-verify")
 @click.option("--pack", "-p", required=True, help="Audit pack directory or zip bundle")
+@click.option(
+    "--profile",
+    type=click.Choice(["default", "audit-grade"], case_sensitive=False),
+    default="default",
+    show_default=True,
+    help="Verification profile (audit-grade enforces strict trusted signature + attestation checks)",
+)
 @click.option("--strict/--no-strict", default=True, show_default=True, help="Strict verification (fail on any issue)")
 @click.option("--public-key", default=None, help="Optional Ed25519 public key PEM path for signature verification")
 @click.option("--public-key-dir", default=None, help="Optional trusted public key directory (.pem). Key is selected by signature key_id.")
@@ -858,6 +865,7 @@ def audit_attest(
 @click.option("--json-out", default=None, help="Optional path to write verification result JSON")
 def audit_verify(
     pack: str,
+    profile: str,
     strict: bool,
     public_key: str | None,
     public_key_dir: str | None,
@@ -872,6 +880,20 @@ def audit_verify(
     """Verify an audit pack using checksums.sha256.txt."""
     from autorisk.audit.verify import verify_audit_pack
 
+    require_attestation_key_match_signature = False
+    if str(profile).strip().lower() == "audit-grade":
+        strict = True
+        require_signature = True
+        require_public_key = True
+        require_attestation = True
+        trust_embedded_public_key = False
+        require_attestation_key_match_signature = True
+        click.echo(
+            "[audit-grade] strict=true require_signature=true require_public_key=true "
+            "require_attestation=true trust_embedded_public_key=false "
+            "require_attestation_key_match_signature=true"
+        )
+
     revoked = _load_revoked_key_ids(
         revoked_key_ids=revoked_key_ids,
         revocation_file=revocation_file,
@@ -884,6 +906,7 @@ def audit_verify(
         require_signature=require_signature,
         require_public_key=require_public_key,
         require_attestation=require_attestation,
+        require_attestation_key_match_signature=require_attestation_key_match_signature,
         trust_embedded_public_key=trust_embedded_public_key,
         revoked_key_ids=revoked,
     )
@@ -1072,6 +1095,13 @@ def audit_handoff(
 
 @cli.command("audit-handoff-verify")
 @click.option("--handoff", "-d", "handoff_dir", required=True, help="Handoff directory containing PACK.zip and verifier_bundle.zip")
+@click.option(
+    "--profile",
+    type=click.Choice(["default", "audit-grade"], case_sensitive=False),
+    default="audit-grade",
+    show_default=True,
+    help="Verification profile (audit-grade enforces strict trusted signature + attestation checks)",
+)
 @click.option("--strict/--no-strict", default=True, show_default=True, help="Strict checksum verification for bundled PACK.zip")
 @click.option("--require-signature/--no-require-signature", default=True, show_default=True, help="Require signature.json in bundled PACK.zip")
 @click.option("--require-public-key/--no-require-public-key", default=True, show_default=True, help="Require trusted key anchor from verifier bundle")
@@ -1098,6 +1128,7 @@ def audit_handoff(
 @click.option("--json-out", default=None, help="Optional path to write handoff verification result JSON")
 def audit_handoff_verify(
     handoff_dir: str,
+    profile: str,
     strict: bool,
     require_signature: bool,
     require_public_key: bool,
@@ -1110,8 +1141,17 @@ def audit_handoff_verify(
     """Verify handoff folder end-to-end (checksums + audit-verify + attestation + audit-validate)."""
     from autorisk.audit.handoff_verify import verify_audit_handoff
 
+    if str(profile).strip().lower() == "audit-grade":
+        click.echo(
+            "[audit-grade] strict=true require_signature=true require_public_key=true "
+            "require_attestation=true validate_profile=audit-grade "
+            "compare_bundled_validate_report=true trust_embedded_public_key=false "
+            "require_attestation_key_match_signature=true"
+        )
+
     result = verify_audit_handoff(
         handoff_dir,
+        profile=profile,
         strict=strict,
         require_signature=require_signature,
         require_public_key=require_public_key,
@@ -1362,6 +1402,12 @@ def finalize_run(
     if audit_grade and (sign_private_key is None or str(sign_private_key).strip() == ""):
         click.echo("Error: --audit-grade requires --sign-private-key", err=True)
         raise SystemExit(2)
+    if audit_grade:
+        has_sign_public_key = sign_public_key is not None and str(sign_public_key).strip() != ""
+        has_sign_public_key_dir = sign_public_key_dir is not None and str(sign_public_key_dir).strip() != ""
+        if not has_sign_public_key and not has_sign_public_key_dir:
+            click.echo("Error: --audit-grade requires --sign-public-key or --sign-public-key-dir", err=True)
+            raise SystemExit(2)
 
     resolved_sign_password = _resolve_private_key_password(
         private_key_password=sign_private_key_password,
@@ -1662,6 +1708,7 @@ def finalize_run(
             require_signature=True,
             require_public_key=True,
             require_attestation=True,
+            require_attestation_key_match_signature=True,
             trust_embedded_public_key=False,
             revoked_key_ids=revoked,
         )

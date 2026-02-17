@@ -353,6 +353,9 @@ def verify_attestation_document(
     """Verify attestation payload and signed hashes."""
     if not isinstance(attestation_doc, dict):
         return False, "attestation.json must be an object"
+    schema_version = attestation_doc.get("schema_version")
+    if schema_version != ATTESTATION_SCHEMA_VERSION:
+        return False, f"unsupported attestation schema_version: {schema_version}"
     if str(attestation_doc.get("algorithm", "")).lower() != ATTESTATION_ALGORITHM:
         return False, f"unsupported algorithm: {attestation_doc.get('algorithm')}"
 

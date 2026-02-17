@@ -180,4 +180,33 @@ def test_finalize_run_audit_grade_requires_trusted_anchor(sample_run_dir: Path, 
     )
 
     assert result.exit_code != 0
-    assert "--sign-private-key was provided without --sign-public-key/--sign-public-key-dir" in result.output
+    assert "--audit-grade requires --sign-public-key or --sign-public-key-dir" in result.output
+    assert not any(sample_run_dir.glob("audit_pack_*"))
+
+
+def test_finalize_run_audit_grade_requires_sign_private_key(sample_run_dir: Path, tmp_path: Path) -> None:
+    _prepare_review_log(sample_run_dir)
+    _, public_key = _write_keypair(tmp_path, prefix="anchor_")
+    keyring_dir = tmp_path / "trusted_keys_only_public"
+    keyring_dir.mkdir(parents=True, exist_ok=True)
+    (keyring_dir / "active.pem").write_bytes(public_key.read_bytes())
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "finalize-run",
+            "-r",
+            str(sample_run_dir),
+            "--policy",
+            "configs/policy.yaml",
+            "--no-include-clips",
+            "--audit-grade",
+            "--sign-public-key-dir",
+            str(keyring_dir),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--audit-grade requires --sign-private-key" in result.output
+    assert not any(sample_run_dir.glob("audit_pack_*"))

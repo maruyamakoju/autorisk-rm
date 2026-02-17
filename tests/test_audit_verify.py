@@ -5,6 +5,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+from click.testing import CliRunner
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from omegaconf import OmegaConf
@@ -13,6 +14,7 @@ from autorisk.audit.attestation import attest_audit_pack
 from autorisk.audit.pack import build_audit_pack
 from autorisk.audit.sign import sign_audit_pack
 from autorisk.audit.verify import verify_audit_pack
+from autorisk.cli import cli
 
 
 def test_audit_verify_happy_path_for_dir_and_zip(sample_run_dir: Path) -> None:
@@ -275,3 +277,154 @@ def test_audit_verify_detects_attestation_mismatch_on_finalize_tamper(sample_run
         issue.kind == "attestation_error" and "finalize_record_sha256" in issue.detail
         for issue in result.issues
     )
+
+
+def test_audit_verify_rejects_unknown_attestation_schema_version(sample_run_dir: Path, tmp_path: Path) -> None:
+    _write_finalize_artifacts(sample_run_dir)
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=True,
+    )
+    assert pack_res.zip_path is not None
+
+    private_key, public_key = _write_keypair(tmp_path)
+    sign_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+    attest_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+
+    def _mutate_attestation(payload: bytes) -> bytes:
+        obj = json.loads(payload.decode("utf-8"))
+        obj["schema_version"] = 999
+        return json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
+
+    _rewrite_zip_member(
+        pack_res.zip_path,
+        member_suffix="attestation.json",
+        mutate_bytes=_mutate_attestation,
+    )
+
+    result = verify_audit_pack(
+        pack_res.zip_path,
+        public_key=public_key,
+        require_signature=True,
+        require_public_key=True,
+        require_attestation=True,
+    )
+    assert result.ok is False
+    assert any(
+        issue.kind == "attestation_error"
+        and "unsupported attestation schema_version" in issue.detail
+        for issue in result.issues
+    )
+
+
+def test_audit_verify_cli_profile_audit_grade_enforces_flags(sample_run_dir: Path, tmp_path: Path) -> None:
+    _write_finalize_artifacts(sample_run_dir)
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=True,
+    )
+    assert pack_res.zip_path is not None
+
+    private_key, public_key = _write_keypair(tmp_path)
+    sign_audit_pack(
+        pack_res.zip_path,
+        private_key_path=private_key,
+        public_key_path=public_key,
+        include_public_key=True,
+    )
+    attest_audit_pack(
+        pack_res.zip_path,
+        private_key_path=private_key,
+        public_key_path=public_key,
+        include_public_key=True,
+    )
+
+    runner = CliRunner()
+    res_missing_anchor = runner.invoke(
+        cli,
+        [
+            "audit-verify",
+            "-p",
+            str(pack_res.zip_path),
+            "--profile",
+            "audit-grade",
+        ],
+    )
+    assert res_missing_anchor.exit_code == 2
+    assert "no --public-key/--public-key-dir was provided" in res_missing_anchor.output
+
+    res_ok = runner.invoke(
+        cli,
+        [
+            "audit-verify",
+            "-p",
+            str(pack_res.zip_path),
+            "--profile",
+            "audit-grade",
+            "--public-key",
+            str(public_key),
+        ],
+        catch_exceptions=False,
+    )
+    assert res_ok.exit_code == 0, res_ok.output
+    assert "[audit-grade]" in res_ok.output
+    assert "Attestation verified: True" in res_ok.output
+
+
+def test_audit_verify_profile_audit_grade_rejects_signature_attestation_key_mismatch(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
+    _write_finalize_artifacts(sample_run_dir)
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=True,
+    )
+    assert pack_res.zip_path is not None
+
+    key_a_dir = tmp_path / "key_a"
+    key_b_dir = tmp_path / "key_b"
+    key_a_dir.mkdir(parents=True, exist_ok=True)
+    key_b_dir.mkdir(parents=True, exist_ok=True)
+    private_a, public_a = _write_keypair(key_a_dir)
+    private_b, public_b = _write_keypair(key_b_dir)
+
+    sign_audit_pack(pack_res.zip_path, private_key_path=private_a, public_key_path=public_a)
+    attest_audit_pack(pack_res.zip_path, private_key_path=private_b, public_key_path=public_b)
+
+    keyring_dir = tmp_path / "trusted_keys"
+    keyring_dir.mkdir(parents=True, exist_ok=True)
+    (keyring_dir / "signer.pem").write_bytes(public_a.read_bytes())
+    (keyring_dir / "attester.pem").write_bytes(public_b.read_bytes())
+
+    default_verify = verify_audit_pack(
+        pack_res.zip_path,
+        public_key_dir=keyring_dir,
+        require_signature=True,
+        require_public_key=True,
+        require_attestation=True,
+    )
+    assert default_verify.ok is True
+    assert default_verify.signature_verified is True
+    assert default_verify.attestation_verified is True
+
+    runner = CliRunner()
+    cli_res = runner.invoke(
+        cli,
+        [
+            "audit-verify",
+            "-p",
+            str(pack_res.zip_path),
+            "--profile",
+            "audit-grade",
+            "--public-key-dir",
+            str(keyring_dir),
+        ],
+    )
+    assert cli_res.exit_code == 2
+    assert "attestation key_id must match signature key_id in audit-grade mode" in cli_res.output

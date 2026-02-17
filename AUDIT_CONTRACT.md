@@ -37,6 +37,7 @@ This document defines the audit contract enforced by:
 - For PACK-only verification, add `--require-attestation` to enforce attestation authenticity.
 - `audit-handoff-verify --require-attestation` enforces attestation authenticity and hash binding.
 - `--no-require-attestation` is for diagnostics only and must not be used for audit-grade acceptance.
+- In audit-grade verification profile, attestation key identity must match signature key identity.
 
 ## Unchecked Files
 
