@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autorisk-rm/schemas/policy_snapshot.schema.json",
+  "title": "AutoRisk Policy Snapshot",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at_utc",
+    "run_dir",
+    "policy",
+    "policy_source"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_dir": { "type": "string" },
+    "policy": {
+      "type": "object",
+      "required": [
+        "required_review_severities",
+        "require_parse_failure_review",
+        "require_error_review",
+        "allow_stale"
+      ],
+      "properties": {
+        "required_review_severities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["NONE", "LOW", "MEDIUM", "HIGH"]
+          }
+        },
+        "require_parse_failure_review": { "type": "boolean" },
+        "require_error_review": { "type": "boolean" },
+        "allow_stale": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "policy_source": {
+      "type": "object",
+      "required": ["source_type", "policy_path", "policy_sha256"],
+      "properties": {
+        "source_type": { "type": "string" },
+        "policy_path": { "type": "string" },
+        "policy_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{0,64}$"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

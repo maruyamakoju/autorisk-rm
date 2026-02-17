@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autorisk-rm/schemas/signature.schema.json",
+  "title": "AutoRisk Signature",
+  "type": "object",
+  "required": ["schema_version", "algorithm", "signed", "signature"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "algorithm": {
+      "type": "string",
+      "enum": ["ed25519"]
+    },
+    "signed": {
+      "type": "object",
+      "required": ["checksums_sha256", "manifest_sha256", "generated_at_utc", "key_id"],
+      "properties": {
+        "checksums_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$"
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$"
+        },
+        "generated_at_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "key_id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{16}$"
+        },
+        "key_label": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 16
+    },
+    "public_key_pem": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

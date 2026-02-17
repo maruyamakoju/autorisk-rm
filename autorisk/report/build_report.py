@@ -55,22 +55,13 @@ class ReportBuilder:
         eval_report: EvalReport | None = None,
         ablation_results: list[AblationResult] | None = None,
         analysis_report: AnalysisReport | None = None,
+        ttc_results=None,
+        calibration_report=None,
+        grounding_report=None,
+        saliency_images: dict | None = None,
         output_dir: Path | str = "outputs",
         video_name: str = "",
     ) -> Path:
-        """Render the full report.
-
-        Args:
-            responses: Ranked Cosmos responses.
-            eval_report: Optional evaluation report.
-            ablation_results: Optional ablation results.
-            analysis_report: Optional deep analysis report.
-            output_dir: Output directory.
-            video_name: Source video filename.
-
-        Returns:
-            Path to generated report.
-        """
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -91,12 +82,36 @@ class ReportBuilder:
                     clip_rel = clip_abs.as_posix()
                 thumb_b64 = _extract_thumbnail_b64(clip_abs)
 
+            # Attach TTC data for this clip
+            clip_ttc = None
+            if ttc_results:
+                clip_name = clip_abs.name if clip_abs else ""
+                for tr in ttc_results:
+                    if Path(tr.clip_path).name == clip_name:
+                        clip_ttc = {
+                            "min_ttc": tr.min_ttc if tr.min_ttc < float("inf") else None,
+                            "n_tracks": tr.n_tracks,
+                            "n_critical": tr.n_critical,
+                            "top_track": {
+                                "class_name": tr.tracks[0].class_name,
+                                "min_ttc": tr.tracks[0].min_ttc,
+                            } if tr.tracks else None,
+                        }
+                        break
+
+            # Attach saliency heatmap if available
+            clip_saliency_b64 = ""
+            if saliency_images and clip_abs:
+                sal_data = saliency_images.get(clip_abs.name, {})
+                clip_saliency_b64 = sal_data.get("heatmap_b64", "")
+
             examples.append({
                 "rank": i,
                 "clip_path": r.request.clip_path,
                 "clip_rel": clip_rel,
                 "clip_name": clip_abs.name if clip_abs else "",
                 "thumbnail_b64": thumb_b64,
+                "saliency_b64": clip_saliency_b64,
                 "peak_time": r.request.peak_time_sec,
                 "fused_score": r.request.fused_score,
                 "severity": a.severity,
@@ -113,6 +128,7 @@ class ReportBuilder:
                 "action": a.recommended_action,
                 "evidence": a.evidence,
                 "confidence": a.confidence,
+                "ttc": clip_ttc,
             })
 
         # Timeline data (all responses, not just top-N)
@@ -193,6 +209,82 @@ class ReportBuilder:
                         "reasoning_excerpt": e.reasoning_excerpt,
                     }
                     for e in analysis_report.error_details
+                ],
+            }
+
+        # TTC analysis context
+        if ttc_results:
+            from autorisk.mining.tracking import TTC_CRITICAL, TTC_WARNING
+            ttc_data = []
+            for tr in ttc_results:
+                ttc_data.append({
+                    "clip_name": Path(tr.clip_path).name,
+                    "min_ttc": tr.min_ttc if tr.min_ttc < float("inf") else None,
+                    "n_tracks": tr.n_tracks,
+                    "n_critical": tr.n_critical,
+                    "n_warning": tr.n_warning,
+                })
+            context["ttc"] = {
+                "clips": ttc_data,
+                "critical_threshold": TTC_CRITICAL,
+                "warning_threshold": TTC_WARNING,
+            }
+
+        # Calibration context
+        if calibration_report:
+            context["calibration"] = {
+                "ece": calibration_report.ece,
+                "ece_after": calibration_report.ece_after,
+                "mce": calibration_report.mce,
+                "optimal_temperature": calibration_report.optimal_temperature,
+                "brier_score": calibration_report.brier_score,
+                "brier_score_after": calibration_report.brier_score_after,
+                "n_samples": calibration_report.n_samples,
+                "confidence_by_severity": calibration_report.confidence_by_severity,
+                "bins": [
+                    {
+                        "bin_lower": b.bin_lower,
+                        "bin_upper": b.bin_upper,
+                        "avg_confidence": b.avg_confidence,
+                        "avg_accuracy": b.avg_accuracy,
+                        "count": b.count,
+                        "gap": b.gap,
+                    }
+                    for b in calibration_report.bins
+                ],
+                "bins_after": [
+                    {
+                        "bin_lower": b.bin_lower,
+                        "bin_upper": b.bin_upper,
+                        "avg_confidence": b.avg_confidence,
+                        "avg_accuracy": b.avg_accuracy,
+                        "count": b.count,
+                        "gap": b.gap,
+                    }
+                    for b in calibration_report.bins_after
+                ],
+            }
+
+        # Grounding context
+        if grounding_report:
+            context["grounding"] = {
+                "mean_score": grounding_report.mean_grounding_score,
+                "n_clips": grounding_report.n_clips,
+                "n_fully_grounded": grounding_report.n_fully_grounded,
+                "n_has_hallucination": grounding_report.n_has_hallucination,
+                "n_has_ungrounded": grounding_report.n_has_ungrounded,
+                "signal_rates": grounding_report.signal_grounding_rates,
+                "by_severity": grounding_report.grounding_by_severity,
+                "details": [
+                    {
+                        "clip_name": d.clip_name,
+                        "grounding_score": d.grounding_score,
+                        "active_signals": d.active_signals,
+                        "mentioned_signals": d.mentioned_signals,
+                        "ungrounded": d.ungrounded_signals,
+                        "hallucinated": d.hallucinated_signals,
+                    }
+                    for d in grounding_report.details
                 ],
             }
 

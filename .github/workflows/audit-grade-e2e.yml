@@ -1,0 +1,318 @@
+name: Audit Grade E2E
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  audit-grade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest build click omegaconf python-dotenv cryptography pydantic numpy scipy opencv-python tqdm jsonschema
+
+      - name: Resource Drift Check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          schema_src = Path("schemas")
+          schema_pkg = Path("autorisk/resources/schemas")
+          src_files = sorted(p.name for p in schema_src.glob("*.json"))
+          pkg_files = sorted(p.name for p in schema_pkg.glob("*.json"))
+          assert src_files == pkg_files, (src_files, pkg_files)
+          for name in src_files:
+              left = (schema_src / name).read_bytes()
+              right = (schema_pkg / name).read_bytes()
+              assert left == right, f"schema drift: {name}"
+
+          config_pairs = [
+              ("configs/policy.yaml", "autorisk/resources/configs/policy.yaml"),
+              ("configs/default.yaml", "autorisk/resources/configs/default.yaml"),
+              ("configs/public.yaml", "autorisk/resources/configs/public.yaml"),
+              ("configs/retry.yaml", "autorisk/resources/configs/retry.yaml"),
+          ]
+          for src, pkg in config_pairs:
+              assert Path(src).read_bytes() == Path(pkg).read_bytes(), f"config drift: {src} vs {pkg}"
+          PY
+
+      - name: Unit Tests (Source Tree)
+        run: |
+          pytest -q
+
+      - name: Build and Install Wheel
+        run: |
+          python -m build --wheel
+          python -m pip install --force-reinstall dist/*.whl
+
+      - name: Prepare External Workdir
+        run: |
+          echo "WORKDIR=$(mktemp -d)" >> "$GITHUB_ENV"
+          mkdir -p "$WORKDIR"
+
+      - name: Create Sample Run Inputs (Outside Repo)
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["WORKDIR"])
+          run_dir = root / "outputs" / "ci_audit_run"
+          run_dir.mkdir(parents=True, exist_ok=True)
+          clips_dir = run_dir / "clips"
+          clips_dir.mkdir(parents=True, exist_ok=True)
+          (clips_dir / "candidate_001.mp4").write_bytes(b"fake-mp4-001")
+          (clips_dir / "candidate_002.mp4").write_bytes(b"fake-mp4-002")
+
+          results = [
+              {
+                  "candidate_rank": 1,
+                  "clip_path": str(clips_dir / "candidate_001.mp4"),
+                  "peak_time_sec": 10.0,
+                  "fused_score": 0.82,
+                  "severity": "HIGH",
+                  "hazards": [],
+                  "causal_reasoning": "test",
+                  "short_term_prediction": "",
+                  "recommended_action": "",
+                  "evidence": [],
+                  "confidence": 0.2,
+                  "parse_success": True,
+                  "error": "",
+                  "raw_answer": "{}",
+              },
+              {
+                  "candidate_rank": 2,
+                  "clip_path": str(clips_dir / "candidate_002.mp4"),
+                  "peak_time_sec": 20.0,
+                  "fused_score": 0.41,
+                  "severity": "LOW",
+                  "hazards": [],
+                  "causal_reasoning": "test",
+                  "short_term_prediction": "",
+                  "recommended_action": "",
+                  "evidence": [],
+                  "confidence": 0.9,
+                  "parse_success": False,
+                  "error": "parse failed",
+                  "raw_answer": "",
+              },
+          ]
+          (run_dir / "cosmos_results.json").write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
+          (run_dir / "candidates.csv").write_text(
+              "rank,peak_time_sec,start_sec,end_sec,fused_score,clip_path,signal_scores\n"
+              f"1,10.0,5.0,15.0,0.82,{clips_dir / 'candidate_001.mp4'},\"{{'audio':0.2,'motion':0.8,'proximity':0.5}}\"\n"
+              f"2,20.0,15.0,25.0,0.41,{clips_dir / 'candidate_002.mp4'},\"{{'audio':0.3,'motion':0.1,'proximity':0.2}}\"\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Create Signing Keys and Keyring (Outside Repo)
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from cryptography.hazmat.primitives import serialization
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+          root = Path(os.environ["WORKDIR"]) / "artifacts" / "ci_keys"
+          trusted = root / "trusted"
+          root.mkdir(parents=True, exist_ok=True)
+          trusted.mkdir(parents=True, exist_ok=True)
+
+          private_key = Ed25519PrivateKey.generate()
+          public_key = private_key.public_key()
+          (root / "private.pem").write_bytes(
+              private_key.private_bytes(
+                  encoding=serialization.Encoding.PEM,
+                  format=serialization.PrivateFormat.PKCS8,
+                  encryption_algorithm=serialization.NoEncryption(),
+              )
+          )
+          (root / "active_public.pem").write_bytes(
+              public_key.public_bytes(
+                  encoding=serialization.Encoding.PEM,
+                  format=serialization.PublicFormat.SubjectPublicKeyInfo,
+              )
+          )
+          (trusted / "active.pem").write_bytes((root / "active_public.pem").read_bytes())
+
+          old_private_key = Ed25519PrivateKey.generate()
+          old_public_key = old_private_key.public_key()
+          (trusted / "old.pem").write_bytes(
+              old_public_key.public_bytes(
+                  encoding=serialization.Encoding.PEM,
+                  format=serialization.PublicFormat.SubjectPublicKeyInfo,
+              )
+          )
+          PY
+
+      - name: Review Approvals (Outside Repo)
+        run: |
+          cd "$WORKDIR"
+          python -m autorisk.cli review-approve -r outputs/ci_audit_run --rank 1 --severity MEDIUM --reason "ci review rank1"
+          python -m autorisk.cli review-approve -r outputs/ci_audit_run --rank 2 --severity LOW --reason "ci review rank2"
+
+      - name: Finalize Run (Audit Grade, One Command)
+        run: |
+          cd "$WORKDIR"
+          python -m autorisk.cli finalize-run \
+            -r outputs/ci_audit_run \
+            --no-include-clips \
+            --zip \
+            --audit-grade \
+            --sign-private-key artifacts/ci_keys/private.pem \
+            --sign-public-key-dir artifacts/ci_keys/trusted \
+            --handoff-out outputs/ci_audit_run/handoff_latest
+
+      - name: Verify Pack and Contract
+        run: |
+          cd "$WORKDIR"
+          set -euo pipefail
+          PACK_ZIP="$(ls -1 outputs/ci_audit_run/audit_pack_*.zip | tail -n 1)"
+          export PACK_ZIP
+          echo "PACK_ZIP=$PACK_ZIP"
+
+          python -m autorisk.cli audit-verify -p "$PACK_ZIP" --strict \
+            --public-key-dir artifacts/ci_keys/trusted \
+            --require-signature --require-public-key --require-attestation \
+            --json-out artifacts/verify_keyring.json
+
+          python -m autorisk.cli audit-validate -p "$PACK_ZIP" --profile audit-grade --enforce --json-out artifacts/validate_report.json
+
+          python -m autorisk.cli audit-verify -p "$PACK_ZIP" --strict \
+            --json-out artifacts/verify_default.json
+
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import zipfile
+          from pathlib import Path
+
+          root = Path(os.environ["WORKDIR"])
+          verify_default = json.loads((root / "artifacts" / "verify_default.json").read_text(encoding="utf-8"))
+          assert verify_default["signature_verified"] is None, verify_default
+          assert verify_default["attestation_verified"] is None, verify_default
+
+          verify_keyring = json.loads((root / "artifacts" / "verify_keyring.json").read_text(encoding="utf-8"))
+          key_id = str(verify_keyring.get("signature_key_id", "")).strip()
+          assert key_id != "", verify_keyring
+          assert verify_keyring.get("attestation_verified") is True, verify_keyring
+          (root / "artifacts" / "revoked_key_ids.txt").write_text(key_id + "\n", encoding="utf-8")
+
+          validate_report = json.loads((root / "artifacts" / "validate_report.json").read_text(encoding="utf-8"))
+          assert validate_report["ok"] is True, validate_report
+
+          finalize_record = json.loads((root / "outputs" / "ci_audit_run" / "finalize_record.json").read_text(encoding="utf-8"))
+          assert finalize_record["pack_fingerprint"] == verify_keyring["checksums_sha256"]
+          assert finalize_record["signature_key_id"] == key_id
+          assert finalize_record["audit_grade"] is True
+          assert finalize_record["validate_ok"] is True
+          assert finalize_record["validate_issues_count"] == 0
+          assert str(finalize_record["handoff_path"]).endswith("handoff_latest")
+          assert len(str(finalize_record["handoff_checksums_sha256"])) == 64
+          assert len(str(finalize_record["handoff_pack_zip_sha256"])) == 64
+          assert len(str(finalize_record["handoff_verifier_bundle_zip_sha256"])) == 64
+
+          packed_finalize = {}
+          with zipfile.ZipFile(Path(os.environ["PACK_ZIP"]), "r") as zf:
+              packed_finalize = json.loads(
+                  zf.read("run_artifacts/finalize_record.json").decode("utf-8")
+              )
+          hex64 = re.compile(r"^[0-9a-fA-F]{64}$")
+          assert hex64.fullmatch(str(packed_finalize.get("handoff_anchor_checksums_sha256", "")))
+          assert hex64.fullmatch(str(packed_finalize.get("handoff_anchor_verifier_bundle_zip_sha256", "")))
+          assert str(packed_finalize.get("handoff_checksums_sha256", "")) == ""
+          assert str(packed_finalize.get("handoff_pack_zip_sha256", "")) == ""
+          assert str(packed_finalize.get("handoff_verifier_bundle_zip_sha256", "")) == ""
+          PY
+
+          if python -m autorisk.cli audit-verify -p "$PACK_ZIP" --strict \
+            --public-key-dir artifacts/ci_keys/trusted \
+            --revocation-file artifacts/revoked_key_ids.txt \
+            --require-signature --require-public-key --require-attestation; then
+            echo "Expected revocation check to fail, but it passed."
+            exit 1
+          else
+            echo "Revocation check failed as expected."
+          fi
+
+      - name: Verify Handoff Folder
+        run: |
+          cd "$WORKDIR"
+          test -f outputs/ci_audit_run/handoff_latest/PACK.zip
+          test -f outputs/ci_audit_run/handoff_latest/verifier_bundle.zip
+          test -f outputs/ci_audit_run/handoff_latest/finalize_record.json
+          test -f outputs/ci_audit_run/handoff_latest/HANDOFF.md
+          test -f outputs/ci_audit_run/handoff_latest/handoff_checksums.sha256.txt
+          python -m autorisk.cli audit-handoff-verify -d outputs/ci_audit_run/handoff_latest \
+            --enforce \
+            --json-out artifacts/handoff_verify.json
+
+  sdist-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build and Install sdist
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build click omegaconf python-dotenv cryptography pydantic numpy scipy opencv-python tqdm jsonschema
+          python -m build --sdist
+          python -m pip install --force-reinstall dist/*.tar.gz
+
+      - name: Smoke Test Outside Repo
+        run: |
+          WORKDIR="$(mktemp -d)"
+          cd "$WORKDIR"
+          mkdir -p outputs/sdist_run/clips
+          printf "fake-mp4" > outputs/sdist_run/clips/candidate_001.mp4
+          cat > outputs/sdist_run/cosmos_results.json <<'JSON'
+          [
+            {
+              "candidate_rank": 1,
+              "clip_path": "outputs/sdist_run/clips/candidate_001.mp4",
+              "peak_time_sec": 10.0,
+              "fused_score": 0.82,
+              "severity": "LOW",
+              "hazards": [],
+              "causal_reasoning": "test",
+              "short_term_prediction": "",
+              "recommended_action": "",
+              "evidence": [],
+              "confidence": 0.9,
+              "parse_success": true,
+              "error": "",
+              "raw_answer": "{}"
+            }
+          ]
+          JSON
+          cat > outputs/sdist_run/candidates.csv <<'CSV'
+          rank,peak_time_sec,start_sec,end_sec,fused_score,clip_path,signal_scores
+          1,10.0,5.0,15.0,0.82,outputs/sdist_run/clips/candidate_001.mp4,"{'audio':0.2,'motion':0.8,'proximity':0.5}"
+          CSV
+
+          python -m autorisk.cli policy-check -r outputs/sdist_run
+          python -m autorisk.cli audit-pack -r outputs/sdist_run --no-include-clips --zip
+          PACK_ZIP="$(ls -1 outputs/sdist_run/audit_pack_*.zip | tail -n 1)"
+          python -m autorisk.cli audit-validate -p "$PACK_ZIP" --enforce

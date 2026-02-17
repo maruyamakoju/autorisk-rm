@@ -1,0 +1,44 @@
+# AutoRisk-RM Public Mode Configuration
+# Uses publicly available dashcam videos for reproducible evaluation
+# Source: https://www.youtube.com/watch?v=i7HspkH7aT4
+#   "UK Dash Camera Compilation #1 | Incidents Of Reckless Driving,
+#    Collisions, And Near-Misses" by JA Dashcam UK
+
+general:
+  output_dir: "outputs/public"
+
+video:
+  segment_padding_sec: 5
+  clip_fps: 10
+  resize_short_edge: 360
+
+mining:
+  top_n: 20
+  audio:
+    weight: 0.15           # Lower for compilation (has music overlay)
+  motion:
+    weight: 0.55           # Higher: scene cuts + actual incidents
+  proximity:
+    weight: 0.30
+
+cosmos:
+  backend: "local"
+  local:
+    model_name: "nvidia/Cosmos-Reason2-8B"
+    max_new_tokens: 4096
+    temperature: 0.2
+    torch_dtype: "float16"
+    timeout_sec: 1200        # 20 min per clip max
+  local_fps: 4
+
+report:
+  format: "html"
+  top_n_examples: 15
+
+public:
+  download_dir: "data/public_samples"
+  source_url: "https://www.youtube.com/watch?v=i7HspkH7aT4"
+  source_title: "UK Dash Camera Compilation #1"
+  source_license: "YouTube Standard License"
+  max_videos: 1
+  max_duration_sec: 300

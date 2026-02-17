@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autorisk-rm/schemas/review_apply_report.schema.json",
+  "title": "AutoRisk Review Apply Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "applied_at_utc",
+    "run_dir",
+    "input_results",
+    "input_results_sha256",
+    "review_log",
+    "applied",
+    "skipped_stale",
+    "skipped_missing",
+    "output_results"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "applied_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_dir": { "type": "string" },
+    "input_results": { "type": "string" },
+    "input_results_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "review_log": { "type": "string" },
+    "applied": { "type": "integer", "minimum": 0 },
+    "skipped_stale": { "type": "integer", "minimum": 0 },
+    "skipped_missing": { "type": "integer", "minimum": 0 },
+    "output_results": { "type": "string" }
+  },
+  "additionalProperties": true
+}

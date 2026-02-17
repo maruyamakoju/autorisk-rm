@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autorisk-rm/schemas/review_queue.schema.json",
+  "title": "AutoRisk Review Queue",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at_utc",
+    "run_dir",
+    "results_path",
+    "results_sha256",
+    "review_log_path",
+    "summary",
+    "items"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_dir": { "type": "string" },
+    "results_path": { "type": "string" },
+    "results_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "review_log_path": { "type": "string" },
+    "summary": {
+      "type": "object",
+      "required": ["queue_size", "required_review_count"],
+      "properties": {
+        "queue_size": { "type": "integer", "minimum": 0 },
+        "required_review_count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["candidate_rank", "severity", "required_reasons", "violation_reasons"],
+        "properties": {
+          "candidate_rank": { "type": "integer", "minimum": 1 },
+          "severity": {
+            "type": "string",
+            "enum": ["NONE", "LOW", "MEDIUM", "HIGH"]
+          },
+          "required_reasons": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "violation_reasons": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

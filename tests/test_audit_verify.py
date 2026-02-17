@@ -1,0 +1,277 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import zipfile
+from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from omegaconf import OmegaConf
+
+from autorisk.audit.attestation import attest_audit_pack
+from autorisk.audit.pack import build_audit_pack
+from autorisk.audit.sign import sign_audit_pack
+from autorisk.audit.verify import verify_audit_pack
+
+
+def test_audit_verify_happy_path_for_dir_and_zip(sample_run_dir: Path) -> None:
+    cfg = OmegaConf.create(
+        {
+            "cosmos": {
+                "backend": "local",
+                "local": {
+                    "model_name": "nvidia/Cosmos-Reason2-8B",
+                    "max_new_tokens": 64,
+                    "temperature": 0.2,
+                    "torch_dtype": "float16",
+                },
+                "local_fps": 4,
+            }
+        }
+    )
+
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=cfg,
+        include_clips=False,
+        create_zip=True,
+    )
+    assert pack_res.output_dir.exists()
+    assert pack_res.zip_path is not None and pack_res.zip_path.exists()
+    assert pack_res.checksums_sha256 != ""
+
+    dir_verify = verify_audit_pack(pack_res.output_dir)
+    zip_verify = verify_audit_pack(pack_res.zip_path)
+
+    assert dir_verify.ok is True
+    assert zip_verify.ok is True
+    assert dir_verify.issues == []
+    assert zip_verify.issues == []
+    assert dir_verify.unchecked_files == []
+    assert zip_verify.unchecked_files == []
+
+
+def test_audit_verify_reports_optional_unchecked_files(sample_run_dir: Path) -> None:
+    cfg = OmegaConf.create(
+        {
+            "cosmos": {
+                "backend": "local",
+                "local": {
+                    "model_name": "nvidia/Cosmos-Reason2-8B",
+                    "max_new_tokens": 64,
+                    "temperature": 0.2,
+                    "torch_dtype": "float16",
+                },
+                "local_fps": 4,
+            }
+        }
+    )
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=cfg,
+        include_clips=False,
+        create_zip=True,
+    )
+    assert pack_res.zip_path is not None
+
+    extra = pack_res.output_dir / "run_artifacts" / "finalize_record.json"
+    extra.parent.mkdir(parents=True, exist_ok=True)
+    extra.write_text('{"schema_version":1}', encoding="utf-8")
+
+    dir_verify = verify_audit_pack(pack_res.output_dir)
+    assert dir_verify.ok is True
+    assert "run_artifacts/finalize_record.json" in (dir_verify.unchecked_files or [])
+
+
+def _write_keypair(tmp_path: Path) -> tuple[Path, Path]:
+    private_key = Ed25519PrivateKey.generate()
+    public_key = private_key.public_key()
+    private_path = tmp_path / "private_key.pem"
+    public_path = tmp_path / "public_key.pem"
+    private_path.write_bytes(
+        private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    public_path.write_bytes(
+        public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    )
+    return private_path, public_path
+
+
+def _sample_cfg() -> OmegaConf:
+    return OmegaConf.create(
+        {
+            "cosmos": {
+                "backend": "local",
+                "local": {
+                    "model_name": "nvidia/Cosmos-Reason2-8B",
+                    "max_new_tokens": 64,
+                    "temperature": 0.2,
+                    "torch_dtype": "float16",
+                },
+                "local_fps": 4,
+            }
+        }
+    )
+
+
+def _write_finalize_artifacts(run_dir: Path) -> None:
+    (run_dir / "finalize_record.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pack_fingerprint": "",
+                "signature_present": True,
+                "signature_key_id": "",
+                "validate_ok": True,
+                "validate_issues_count": 0,
+                "validate_report_path": "run_artifacts/audit_validate_report.json",
+                "validate_report_sha256": "",
+                "handoff_path": "",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "audit_validate_report.json").write_text(
+        json.dumps(
+            {
+                "source": str(run_dir),
+                "mode": "dir",
+                "pack_root": str(run_dir),
+                "schema_dir": "package://autorisk.resources.schemas",
+                "files_validated": 0,
+                "records_validated": 0,
+                "ok": True,
+                "issues": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _rewrite_zip_member(
+    zip_path: Path,
+    *,
+    member_suffix: str,
+    mutate_bytes,
+    delete: bool = False,
+) -> None:
+    with tempfile.TemporaryDirectory(prefix="autorisk-test-zip-rewrite-") as tmp_dir:
+        tmp_zip = Path(tmp_dir) / zip_path.name
+        found = False
+        with zipfile.ZipFile(zip_path, "r") as src, zipfile.ZipFile(
+            tmp_zip, "w", compression=zipfile.ZIP_DEFLATED
+        ) as dst:
+            for info in src.infolist():
+                if info.is_dir():
+                    dst.writestr(info, b"")
+                    continue
+                payload = src.read(info.filename)
+                if info.filename.endswith(member_suffix):
+                    found = True
+                    if delete:
+                        continue
+                    payload = mutate_bytes(payload)
+                dst.writestr(info, payload)
+        assert found, f"member not found in zip: {member_suffix}"
+        tmp_zip.replace(zip_path)
+
+
+def test_audit_verify_require_attestation_happy_path(sample_run_dir: Path, tmp_path: Path) -> None:
+    _write_finalize_artifacts(sample_run_dir)
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=True,
+    )
+    assert pack_res.zip_path is not None
+
+    private_key, public_key = _write_keypair(tmp_path)
+    sign_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+    attest_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+
+    result = verify_audit_pack(
+        pack_res.zip_path,
+        public_key=public_key,
+        require_signature=True,
+        require_public_key=True,
+        require_attestation=True,
+    )
+    assert result.ok is True
+    assert result.attestation_present is True
+    assert result.attestation_verified is True
+
+
+def test_audit_verify_require_attestation_fails_when_missing(sample_run_dir: Path, tmp_path: Path) -> None:
+    _write_finalize_artifacts(sample_run_dir)
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=True,
+    )
+    assert pack_res.zip_path is not None
+
+    private_key, public_key = _write_keypair(tmp_path)
+    sign_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+
+    result = verify_audit_pack(
+        pack_res.zip_path,
+        public_key=public_key,
+        require_signature=True,
+        require_public_key=True,
+        require_attestation=True,
+    )
+    assert result.ok is False
+    assert any(issue.kind == "attestation_error" and "not found" in issue.detail for issue in result.issues)
+
+
+def test_audit_verify_detects_attestation_mismatch_on_finalize_tamper(sample_run_dir: Path, tmp_path: Path) -> None:
+    _write_finalize_artifacts(sample_run_dir)
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=True,
+    )
+    assert pack_res.zip_path is not None
+
+    private_key, public_key = _write_keypair(tmp_path)
+    sign_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+    attest_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+
+    def _mutate_finalize_record(payload: bytes) -> bytes:
+        obj = json.loads(payload.decode("utf-8"))
+        obj["validate_ok"] = False
+        return json.dumps(obj, ensure_ascii=False, indent=2).encode("utf-8")
+
+    _rewrite_zip_member(
+        pack_res.zip_path,
+        member_suffix="run_artifacts/finalize_record.json",
+        mutate_bytes=_mutate_finalize_record,
+    )
+
+    result = verify_audit_pack(
+        pack_res.zip_path,
+        public_key=public_key,
+        require_signature=True,
+        require_public_key=True,
+        require_attestation=True,
+    )
+    assert result.ok is False
+    assert any(
+        issue.kind == "attestation_error" and "finalize_record_sha256" in issue.detail
+        for issue in result.issues
+    )

@@ -293,6 +293,40 @@ Error Distribution:
 
 6. **Robust JSON parsing achieves 100% success**: Multi-layer repair pipeline (truncation repair, missing comma fix, trailing key cleanup, markdown fallback) plus reduced-FPS retry for stubborn clips achieves 20/20 parse success.
 
+### TTC (Time-to-Collision) Analysis
+
+Monocular TTC estimation via YOLOv8n + ByteTrack object tracking using the tau approximation (TTC = bbox_area / d(area)/dt):
+
+| Severity | Mean TTC | Interpretation |
+|----------|---------|----------------|
+| NONE | 1.77s | Objects distant or receding |
+| LOW | 0.50s | Moderate approach rate |
+| MEDIUM | 0.42s | Close approach |
+| HIGH | 0.52s | Rapid closure |
+
+**Spearman ρ = -0.495 (p=0.026)** — the only metric achieving statistical significance (p<0.05). TTC provides an objective, physics-based safety metric that validates Cosmos's subjective severity judgments.
+
+### Confidence Calibration
+
+| Metric | Before | After T-scaling (T=10.0) | Improvement |
+|--------|--------|--------------------------|-------------|
+| ECE | 0.578 | 0.362 | 37% |
+| Brier Score | 0.569 | 0.340 | 40% |
+
+Per-severity analysis reveals the model is severely overconfident for NONE predictions (confidence=0.70, accuracy=0.00) and underconfident for HIGH (confidence=0.33, accuracy=0.67). Temperature scaling (Guo et al., 2017) corrects this miscalibration.
+
+### Cross-Modal Grounding
+
+Measures agreement between quantitative mining signals and Cosmos's natural-language reasoning:
+
+| Signal | Grounding Rate | Interpretation |
+|--------|---------------|----------------|
+| Proximity | 100% | Cosmos always references nearby objects when detected |
+| Motion | 88.9% | Cosmos identifies sudden movements in most cases |
+| Audio | 25.0% | Expected: VLM processes video frames only, not audio |
+
+Mean grounding score: **90.8%** (15/20 clips fully grounded). Audio's low grounding rate validates that Cosmos reasons from visual evidence, not signal metadata.
+
 ## CLI Commands
 
 ```bash
@@ -308,10 +342,55 @@ python -m autorisk.cli analyze -r RESULTS.json -o DIR     # Deep analysis (signa
 python -m autorisk.cli report -r RESULTS.json -o DIR      # Report generation
 python -m autorisk.cli supplement -r RESULTS.json           # Fill missing prediction/action (2nd pass)
 python -m autorisk.cli reparse -r RESULTS.json             # Re-parse failed entries
+python -m autorisk.cli ttc -d CLIPS_DIR -o DIR              # TTC via object tracking (YOLOv8n + ByteTrack)
+python -m autorisk.cli grounding -r RESULTS.json -o DIR     # Cross-modal grounding analysis
+python -m autorisk.cli calibration -r RESULTS.json -o DIR   # Confidence calibration (ECE + T-scaling)
+python -m autorisk.cli saliency -d CLIPS_DIR -r RESULTS.json -o DIR  # Gradient saliency maps (requires GPU)
+python -m autorisk.cli audit-pack -r RUN_DIR               # Auditable evidence pack (manifest/trace/checksums)
+python -m autorisk.cli audit-sign -p PACK_OR_ZIP --private-key keys/private.pem [--private-key-password-env AUTORISK_SIGNING_KEY_PASSWORD] [--public-key keys/public.pem] [--key-label ops-2026q1]  # Sign audit pack (Ed25519)
+python -m autorisk.cli audit-attest -p PACK_OR_ZIP --private-key keys/private.pem [--private-key-password-env AUTORISK_SIGNING_KEY_PASSWORD] [--public-key keys/public.pem] [--key-label ops-2026q1]  # Attest non-checksummed finalize/validate artifacts
+python -m autorisk.cli audit-verify -p PACK_OR_ZIP [--public-key keys/public.pem | --public-key-dir keys/trusted] [--require-signature --require-public-key --require-attestation] [--revocation-file revoked_key_ids.txt]  # Verify integrity + authenticity
+python -m autorisk.cli audit-validate -p PACK_OR_ZIP --enforce   # Validate audit contract (schema + semantic checks)
+python -m autorisk.cli audit-verifier-bundle --out verifier_bundle --public-key-dir keys/trusted [--revocation-file revoked_key_ids.txt]  # Build portable verifier bundle
+python -m autorisk.cli audit-handoff -r RUN_DIR --out handoff    # Build single handoff folder (PACK + verifier bundle + finalize record)
+python -m autorisk.cli audit-handoff-verify -d HANDOFF_DIR --enforce  # Verify handoff in one command (checksums + verify + validate + attestation)
+python -m autorisk.cli review-approve -r RUN_DIR --rank N --severity MEDIUM --reason "..."  # Append human decision
+python -m autorisk.cli review-apply -r RUN_DIR             # Produce cosmos_results_reviewed.json
+python -m autorisk.cli policy-check -r RUN_DIR --policy configs/policy.yaml --enforce  # Enforce review gating policy
+python -m autorisk.cli finalize-run -r RUN_DIR --zip --audit-grade --sign-private-key keys/private.pem --sign-public-key-dir keys/trusted --handoff-out RUN_DIR/handoff_latest  # Recommended audit-grade handoff (verify+validate+handoff)
+python -m autorisk.cli finalize-run -r RUN_DIR --policy configs/policy.yaml --zip --enforce [--sign-private-key ... --sign-public-key ... --require-signature --require-trusted-key]  # review-apply -> policy-check -> audit-pack -> audit-sign? -> audit-verify
 
 # With public config
 python -m autorisk.cli -c configs/public.yaml run -i VIDEO -o OUTPUT_DIR
 ```
+
+`audit-pack` output (default: `RUN_DIR/audit_pack_<timestamp>`):
+
+- `manifest.json`: run/model/prompt provenance, file inventory, summary stats
+- `decision_trace.jsonl`: one record per candidate with signal scores, parsing/repair log, final decision, raw response
+- `checksums.sha256.txt`: SHA256 chain for every file in the pack
+- `signature.json` (optional): Ed25519 signature payload (`audit-sign`) over `checksums.sha256.txt` and `manifest.json`
+- `attestation.json` (optional but recommended): Ed25519 attestation over non-checksummed `run_artifacts/finalize_record.json` and `run_artifacts/audit_validate_report.json`
+- `run_artifacts/*`: copied run outputs (`cosmos_results.json`, `candidates.csv`, `cosmos_results_reviewed.json`, `review_apply_report.json`, `review_diff_report.json`, `policy_report.json`, `review_queue.json`, `policy_snapshot.json`, `audit_validate_report.json`, eval/ablation/report files if present)
+- `clips/*`: candidate clip evidence (when `--include-clips`)
+- `audit_pack_<timestamp>.zip`: handoff-ready archive (when `--zip`)
+- `handoff_<timestamp>/`: optional single handoff folder from `audit-handoff` containing `PACK.zip`, `verifier_bundle.zip`, `finalize_record.json`, `audit_validate_report.json` (if available), `HANDOFF.md`, and `handoff_checksums.sha256.txt`
+- `handoff_checksums.sha256.txt` intentionally excludes `PACK.zip` (and `finalize_record.json`) to avoid circular hash dependencies; `PACK.zip` is verified by `audit-verify`
+- Pack fingerprint (`checksums.sha256.txt` SHA256) is printed by CLI and should be recorded externally (ticket/DB) at submission time
+- `finalize_record.json` is emitted in `RUN_DIR` and copied into `run_artifacts/finalize_record.json` during `finalize-run` for external audit logging
+- `audit-verify` prints `Unchecked files` (e.g., `run_artifacts/finalize_record.json`, `run_artifacts/audit_validate_report.json`) so non-checksummed payload is explicit during audit review
+- `audit-handoff-verify` validates `attestation.json` by default (`--require-attestation`) and checks it against PACK fingerprint + run artifacts hashes
+- For PACK-only receipt (without handoff folder), use `audit-verify --require-attestation` to verify signature + attestation in one command
+- Legacy bundles without `attestation.json` can be inspected with `--no-require-attestation` for diagnostics only (not valid for audit-grade decisions)
+- `audit-validate` supports `--profile audit-grade` to require signature/finalize/policy/review artifacts in addition to schema + semantic checks
+- `finalize-run --audit-grade` now includes `audit-validate` and handoff generation in one command (`--write-handoff` defaults to ON in audit-grade mode)
+- Policy defaults are configurable in `configs/policy.yaml` and policy source/hash are recorded in `policy_report.json`
+- Runtime defaults (schemas + policy) are bundled in package resources, so `policy-check` and `audit-validate` work even when running outside the repo root
+- Trust model: by default `audit-verify` does **not** trust `signature.json` embedded public keys. For audit-grade authenticity, always provide `--public-key` (or `--public-key-dir`) and use `--require-signature --require-public-key`.
+- Key rotation: use `--public-key-dir` to auto-select the verification key by `signed.key_id`.
+- Revocation: pass `--revoked-key-id` and/or `--revocation-file` to reject compromised signing keys at verify time.
+- Key operations and rotation policy: `KEYS.md`
+- Audit contract (required files, unchecked-file policy, semantic guarantees): `AUDIT_CONTRACT.md`
 
 ## Requirements
 
@@ -326,6 +405,9 @@ python -m autorisk.cli -c configs/public.yaml run -i VIDEO -o OUTPUT_DIR
 
 ```
 autorisk/
+  audit/          # Audit pack builder (manifest/trace/checksums/zip)
+  policy/         # Review-gating policy checks and queue/report generation
+  review/         # Human review logging and reviewed-result generation
   mining/         # B1: Audio, motion, proximity signal scorers + fusion
   cosmos/         # B2: Local inference client, prompt templates, schemas
   eval/           # B4/B5: Metrics, checklist, ablation

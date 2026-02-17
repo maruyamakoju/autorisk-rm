@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autorisk-rm/schemas/review_log_entry.schema.json",
+  "title": "AutoRisk Review Log Entry",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "timestamp_utc",
+    "operator",
+    "run",
+    "candidate",
+    "decision_before",
+    "decision_after",
+    "reason",
+    "evidence_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "operator": {
+      "type": "object",
+      "required": ["user", "host"],
+      "properties": {
+        "user": { "type": "string" },
+        "host": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "run": {
+      "type": "object",
+      "required": ["run_dir", "results_sha256", "candidates_sha256"],
+      "properties": {
+        "run_dir": { "type": "string" },
+        "results_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$"
+        },
+        "candidates_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{0,64}$"
+        }
+      },
+      "additionalProperties": true
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["candidate_rank", "clip_path", "clip_sha256"],
+      "properties": {
+        "candidate_rank": { "type": "integer", "minimum": 1 },
+        "clip_path": { "type": "string" },
+        "clip_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{0,64}$"
+        }
+      },
+      "additionalProperties": true
+    },
+    "decision_before": {
+      "type": "object",
+      "required": ["severity"],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["NONE", "LOW", "MEDIUM", "HIGH"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "decision_after": {
+      "type": "object",
+      "required": ["severity"],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["NONE", "LOW", "MEDIUM", "HIGH"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "reason": {
+      "type": "string"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

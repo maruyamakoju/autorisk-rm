@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autorisk-rm/schemas/finalize_record.schema.json",
+  "title": "AutoRisk Finalize Record",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "created_at_utc",
+    "run_dir",
+    "pack_dir",
+    "pack_fingerprint",
+    "signature_present",
+    "signature_verified",
+    "signature_key_id",
+    "policy_source",
+    "policy_sha256",
+    "verification_issues",
+    "audit_grade",
+    "require_signature",
+    "require_trusted_key",
+    "trust_embedded_public_key"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_dir": { "type": "string" },
+    "pack_dir": { "type": "string" },
+    "zip_path": { "type": "string" },
+    "autorisk_version": { "type": "string" },
+    "python_version": { "type": "string" },
+    "platform": { "type": "string" },
+    "pack_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "signature_present": { "type": "boolean" },
+    "signature_verified": {
+      "type": ["boolean", "null"]
+    },
+    "signature_key_id": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{0,16}$"
+    },
+    "signature_key_source": { "type": "string" },
+    "policy_source": {
+      "type": "object"
+    },
+    "policy_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{0,64}$"
+    },
+    "revocation_file": { "type": "string" },
+    "revocation_file_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{0,64}$"
+    },
+    "revoked_key_ids_count": { "type": "integer", "minimum": 0 },
+    "verification_issues": { "type": "integer", "minimum": 0 },
+    "enforce": { "type": "boolean" },
+    "audit_grade": { "type": "boolean" },
+    "require_signature": { "type": "boolean" },
+    "require_trusted_key": { "type": "boolean" },
+    "trust_embedded_public_key": { "type": "boolean" },
+    "verifier_bundle_path": { "type": "string" },
+    "validate_ok": { "type": "boolean" },
+    "validate_issues_count": { "type": "integer", "minimum": 0 },
+    "validate_report_path": { "type": "string" },
+    "validate_report_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{0,64}$"
+    },
+    "handoff_path": { "type": "string" },
+    "handoff_checksums_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{0,64}$"
+    },
+    "handoff_anchor_checksums_sha256": {
+      "type": "string",
+      "description": "Attested handoff checksum anchor used by PACK-internal finalize_record.",
+      "pattern": "^[0-9a-fA-F]{0,64}$"
+    },
+    "handoff_pack_zip_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{0,64}$"
+    },
+    "handoff_verifier_bundle_zip_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{0,64}$"
+    },
+    "handoff_anchor_verifier_bundle_zip_sha256": {
+      "type": "string",
+      "description": "Attested verifier bundle anchor used by PACK-internal finalize_record.",
+      "pattern": "^[0-9a-fA-F]{0,64}$"
+    },
+    "governance_version": { "type": "string" }
+  },
+  "additionalProperties": true
+}

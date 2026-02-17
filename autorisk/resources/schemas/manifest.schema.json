@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autorisk-rm/schemas/manifest.schema.json",
+  "title": "AutoRisk Audit Manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at_utc",
+    "generated_by",
+    "tool",
+    "run",
+    "summary",
+    "payload_files"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "schema": {
+      "type": "object",
+      "required": ["version", "compatibility"],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "compatibility": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generated_by": {
+      "type": "object",
+      "required": ["user", "host"],
+      "properties": {
+        "user": { "type": "string" },
+        "host": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "source": {
+      "type": "object"
+    },
+    "environment": {
+      "type": "object"
+    },
+    "run": {
+      "type": "object",
+      "required": ["run_dir", "run_name", "results_file", "candidates_file"],
+      "properties": {
+        "run_dir": { "type": "string" },
+        "run_name": { "type": "string" },
+        "input_video_path": { "type": "string" },
+        "input_video_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{0,64}$"
+        },
+        "results_file": { "type": "string" },
+        "candidates_file": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "summary": {
+      "type": "object",
+      "required": ["records", "parse_success_recorded", "parse_replay_success", "severity_histogram"],
+      "properties": {
+        "records": { "type": "integer", "minimum": 0 },
+        "parse_success_recorded": { "type": "integer", "minimum": 0 },
+        "parse_replay_success": { "type": "integer", "minimum": 0 },
+        "severity_histogram": {
+          "type": "object",
+          "required": ["NONE", "LOW", "MEDIUM", "HIGH"],
+          "properties": {
+            "NONE": { "type": "integer", "minimum": 0 },
+            "LOW": { "type": "integer", "minimum": 0 },
+            "MEDIUM": { "type": "integer", "minimum": 0 },
+            "HIGH": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "payload_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "bytes", "sha256"],
+        "properties": {
+          "path": { "type": "string" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

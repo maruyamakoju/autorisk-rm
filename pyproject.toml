@@ -22,6 +22,8 @@ dependencies = [
     "requests>=2.31",
     "python-dotenv>=1.0",
     "tqdm>=4.66",
+    "cryptography>=42.0",
+    "jsonschema>=4.22.0",
 ]
 
 [project.optional-dependencies]
@@ -34,3 +36,7 @@ autorisk = "autorisk.cli:cli"
 
 [tool.setuptools.packages.find]
 include = ["autorisk*"]
+
+[tool.setuptools.package-data]
+"autorisk.resources.schemas" = ["*.json"]
+"autorisk.resources.configs" = ["*.yaml"]

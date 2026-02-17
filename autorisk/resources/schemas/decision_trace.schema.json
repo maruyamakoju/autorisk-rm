@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autorisk-rm/schemas/decision_trace.schema.json",
+  "title": "AutoRisk Decision Trace Record",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "trace_id",
+    "candidate_rank",
+    "clip_path",
+    "candidate_scores",
+    "model",
+    "prompt",
+    "parsing",
+    "final_assessment",
+    "raw_response",
+    "audit_context"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "candidate_rank": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "clip_path": {
+      "type": "string"
+    },
+    "clip_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{0,64}$"
+    },
+    "input_video_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{0,64}$"
+    },
+    "event_time_sec": {
+      "type": "object",
+      "required": ["peak", "start", "end"],
+      "properties": {
+        "peak": { "type": "number" },
+        "start": { "type": "number" },
+        "end": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "candidate_scores": {
+      "type": "object",
+      "required": ["fused"],
+      "properties": {
+        "fused": { "type": "number" },
+        "audio": { "type": "number" },
+        "motion": { "type": "number" },
+        "proximity": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "model": {
+      "type": "object",
+      "required": ["backend", "model_name", "params"],
+      "properties": {
+        "backend": { "type": "string" },
+        "model_name": { "type": "string" },
+        "params": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "prompt": {
+      "type": "object"
+    },
+    "parsing": {
+      "type": "object",
+      "required": [
+        "parse_success_recorded",
+        "parse_replay_success",
+        "parse_stage",
+        "repair_applied",
+        "json_repair_log"
+      ],
+      "properties": {
+        "parse_success_recorded": { "type": "boolean" },
+        "parse_replay_success": { "type": "boolean" },
+        "parse_stage": { "type": "string" },
+        "repair_applied": { "type": "boolean" },
+        "json_repair_log": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "final_assessment": {
+      "type": "object",
+      "required": [
+        "severity",
+        "confidence",
+        "hazards",
+        "causal_reasoning",
+        "short_term_prediction",
+        "recommended_action",
+        "evidence",
+        "error"
+      ],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["NONE", "LOW", "MEDIUM", "HIGH"]
+        },
+        "confidence": { "type": "number" },
+        "hazards": { "type": "array" },
+        "causal_reasoning": { "type": "string" },
+        "short_term_prediction": { "type": "string" },
+        "recommended_action": { "type": "string" },
+        "evidence": { "type": "array" },
+        "error": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "raw_response": {
+      "type": "string"
+    },
+    "audit_context": {
+      "type": "object",
+      "required": ["generated_at_utc", "generated_by"],
+      "properties": {
+        "generated_at_utc": { "type": "string", "format": "date-time" },
+        "generated_by": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

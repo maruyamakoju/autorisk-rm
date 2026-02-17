@@ -1,0 +1,11 @@
+# AutoRisk policy defaults for review gating.
+# This file is loaded by:
+#   python -m autorisk.cli policy-check --policy configs/policy.yaml
+#   python -m autorisk.cli finalize-run --policy configs/policy.yaml
+
+required_review_severities:
+  - MEDIUM
+  - HIGH
+require_parse_failure_review: true
+require_error_review: true
+allow_stale: false

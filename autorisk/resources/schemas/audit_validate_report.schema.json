@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autorisk-rm/schemas/audit_validate_report.schema.json",
+  "title": "AutoRisk Audit Validate Report",
+  "type": "object",
+  "required": [
+    "source",
+    "mode",
+    "pack_root",
+    "schema_dir",
+    "files_validated",
+    "records_validated",
+    "ok",
+    "issues"
+  ],
+  "properties": {
+    "source": { "type": "string" },
+    "mode": { "type": "string", "enum": ["dir", "zip"] },
+    "pack_root": { "type": "string" },
+    "schema_dir": { "type": "string" },
+    "files_validated": { "type": "integer", "minimum": 0 },
+    "records_validated": { "type": "integer", "minimum": 0 },
+    "ok": { "type": "boolean" },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "path", "detail", "line"],
+        "properties": {
+          "kind": { "type": "string" },
+          "path": { "type": "string" },
+          "detail": { "type": "string" },
+          "line": { "type": ["integer", "null"] }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

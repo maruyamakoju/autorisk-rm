@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autorisk-rm/schemas/policy_report.schema.json",
+  "title": "AutoRisk Policy Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at_utc",
+    "run_dir",
+    "results_path",
+    "results_sha256",
+    "review_log_path",
+    "allow_stale",
+    "policy",
+    "policy_source",
+    "summary",
+    "violations"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_dir": { "type": "string" },
+    "results_path": { "type": "string" },
+    "results_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "review_log_path": { "type": "string" },
+    "allow_stale": { "type": "boolean" },
+    "policy": {
+      "type": "object",
+      "required": [
+        "required_review_severities",
+        "require_parse_failure_review",
+        "require_error_review",
+        "allow_stale"
+      ],
+      "properties": {
+        "required_review_severities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["NONE", "LOW", "MEDIUM", "HIGH"]
+          }
+        },
+        "require_parse_failure_review": { "type": "boolean" },
+        "require_error_review": { "type": "boolean" },
+        "allow_stale": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "policy_source": {
+      "type": "object",
+      "required": ["source_type", "policy_path", "policy_sha256"],
+      "properties": {
+        "source_type": { "type": "string" },
+        "policy_path": { "type": "string" },
+        "policy_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{0,64}$"
+        }
+      },
+      "additionalProperties": true
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "total_candidates",
+        "required_review_count",
+        "reviewed_count_valid",
+        "reviewed_count_stale",
+        "missing_review_count",
+        "passed"
+      ],
+      "properties": {
+        "total_candidates": { "type": "integer", "minimum": 0 },
+        "required_review_count": { "type": "integer", "minimum": 0 },
+        "reviewed_count_valid": { "type": "integer", "minimum": 0 },
+        "reviewed_count_stale": { "type": "integer", "minimum": 0 },
+        "missing_review_count": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "violations": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autorisk-rm/schemas/review_diff_report.schema.json",
+  "title": "AutoRisk Review Diff Report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "applied_at_utc",
+    "run_dir",
+    "input_results",
+    "input_results_sha256",
+    "review_log",
+    "output_results",
+    "applied",
+    "override_count",
+    "no_change_count",
+    "transition_histogram",
+    "changed_candidates"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "applied_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_dir": { "type": "string" },
+    "input_results": { "type": "string" },
+    "input_results_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "review_log": { "type": "string" },
+    "output_results": { "type": "string" },
+    "applied": { "type": "integer", "minimum": 0 },
+    "override_count": { "type": "integer", "minimum": 0 },
+    "no_change_count": { "type": "integer", "minimum": 0 },
+    "transition_histogram": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "changed_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "candidate_rank",
+          "severity_before",
+          "severity_after",
+          "record_sha256",
+          "reason"
+        ],
+        "properties": {
+          "candidate_rank": { "type": "integer", "minimum": 1 },
+          "severity_before": {
+            "type": "string",
+            "enum": ["NONE", "LOW", "MEDIUM", "HIGH"]
+          },
+          "severity_after": {
+            "type": "string",
+            "enum": ["NONE", "LOW", "MEDIUM", "HIGH"]
+          },
+          "record_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          },
+          "reason": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
