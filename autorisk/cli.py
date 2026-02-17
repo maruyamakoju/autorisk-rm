@@ -1637,6 +1637,10 @@ def finalize_run(
         pack_finalize_record = dict(finalize_record)
 
     if sign_private_key is not None and str(sign_private_key).strip() != "":
+        # IMPORTANT ordering contract:
+        # 1) pack_finalize_record and audit_validate_report must already be final.
+        # 2) audit-attest signs those PACK-internal files.
+        # 3) do not mutate PACK run_artifacts finalize/validate after this point.
         attest_res = attest_audit_pack(
             verify_target,
             private_key_path=sign_private_key,
@@ -1649,6 +1653,7 @@ def finalize_run(
 
     final_verify_res = verify_res
     if audit_grade:
+        # Final audit-grade gate: verify signature + trusted key + attestation on final PACK.
         final_verify_res = verify_audit_pack(
             verify_target,
             strict=True,

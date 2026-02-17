@@ -879,7 +879,7 @@ def _semantic_check_finalize_record(
                 kind="semantic_error",
                 path="run_artifacts/finalize_record.json",
                 detail=(
-                    "PACK finalize_record must not include handoff_* hashes; "
+                    "PACK-internal run_artifacts/finalize_record.json must not include handoff_* hashes; "
                     "use handoff_anchor_* to avoid circular dependency"
                 ),
             )

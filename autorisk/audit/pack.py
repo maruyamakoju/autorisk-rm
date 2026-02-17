@@ -392,6 +392,40 @@ def _copy_if_exists(src: Path, dst: Path) -> bool:
     return True
 
 
+def _sanitize_finalize_record_for_pack(payload: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize finalize_record for PACK-internal contract (no handoff_* hashes)."""
+    sanitized = dict(payload)
+    for key in [
+        "handoff_path",
+        "handoff_checksums_sha256",
+        "handoff_pack_zip_sha256",
+        "handoff_verifier_bundle_zip_sha256",
+    ]:
+        sanitized[key] = ""
+
+    anchor_checksums = str(sanitized.get("handoff_anchor_checksums_sha256", "")).strip()
+    anchor_bundle = str(sanitized.get("handoff_anchor_verifier_bundle_zip_sha256", "")).strip()
+    if (anchor_checksums == "") != (anchor_bundle == ""):
+        sanitized["handoff_anchor_checksums_sha256"] = ""
+        sanitized["handoff_anchor_verifier_bundle_zip_sha256"] = ""
+    return sanitized
+
+
+def _copy_finalize_record_for_pack(src: Path, dst: Path) -> bool:
+    if not src.exists():
+        return False
+    try:
+        loaded = _read_json(src)
+    except Exception as exc:
+        log.warning("Skipping finalize_record copy (invalid JSON): %s (%s)", src, str(exc)[:200])
+        return False
+    if not isinstance(loaded, dict):
+        log.warning("Skipping finalize_record copy (must be JSON object): %s", src)
+        return False
+    _write_json(dst, _sanitize_finalize_record_for_pack(loaded))
+    return True
+
+
 def _collect_payload_file_entries(
     root: Path,
     *,
@@ -589,7 +623,12 @@ def build_audit_pack(
     ]
     for src in run_files:
         dst = run_artifacts_dir / src.name
-        if _copy_if_exists(src, dst):
+        copied = False
+        if src.name == _FINALIZE_RECORD_FILENAME:
+            copied = _copy_finalize_record_for_pack(src, dst)
+        else:
+            copied = _copy_if_exists(src, dst)
+        if copied:
             copied_files.append(dst.relative_to(output_dir_path).as_posix())
 
     human_review_files: list[str] = []
