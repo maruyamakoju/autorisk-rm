@@ -308,6 +308,12 @@ jobs:
 
           packed_finalize = {}
           with zipfile.ZipFile(Path(os.environ["PACK_ZIP"]), "r") as zf:
+              members = set(zf.namelist())
+              assert "run_artifacts/run_summary.json" in members
+              assert "run_artifacts/submission_metrics.json" in members
+              checksums_text = zf.read("checksums.sha256.txt").decode("utf-8")
+              assert "  run_artifacts/run_summary.json" in checksums_text
+              assert "  run_artifacts/submission_metrics.json" in checksums_text
               packed_finalize = json.loads(
                   zf.read("run_artifacts/finalize_record.json").decode("utf-8")
               )

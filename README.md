@@ -453,7 +453,7 @@ python -m autorisk.cli -c configs/public.yaml run -i VIDEO -o OUTPUT_DIR
 - `checksums.sha256.txt`: SHA256 chain for every file in the pack
 - `signature.json` (optional): Ed25519 signature payload (`audit-sign`) over `checksums.sha256.txt` and `manifest.json`
 - `attestation.json` (optional but recommended): Ed25519 attestation over non-checksummed `run_artifacts/finalize_record.json` and `run_artifacts/audit_validate_report.json`
-- `run_artifacts/*`: copied run outputs (`cosmos_results.json`, `candidates.csv`, `cosmos_results_reviewed.json`, `review_apply_report.json`, `review_diff_report.json`, `policy_report.json`, `review_queue.json`, `policy_snapshot.json`, `audit_validate_report.json`, eval/ablation/report files if present)
+- `run_artifacts/*`: copied run outputs (`cosmos_results.json`, `candidates.csv`, `run_summary.json`, `submission_metrics.json`, `cosmos_results_reviewed.json`, `review_apply_report.json`, `review_diff_report.json`, `policy_report.json`, `review_queue.json`, `policy_snapshot.json`, `audit_validate_report.json`, eval/ablation/report files if present)
 - `clips/*`: candidate clip evidence (when `--include-clips`)
 - `audit_pack_<timestamp>.zip`: handoff-ready archive (when `--zip`)
 - `handoff_<timestamp>/`: optional single handoff folder from `audit-handoff` containing `PACK.zip`, `verifier_bundle.zip`, `finalize_record.json`, `audit_validate_report.json` (if available), `HANDOFF.md`, and `handoff_checksums.sha256.txt`
@@ -467,6 +467,7 @@ python -m autorisk.cli -c configs/public.yaml run -i VIDEO -o OUTPUT_DIR
 - `--profile default` is diagnostics-only: crypto requirements are not enforced and results must not be used for audit-grade acceptance
 - Legacy bundles without `attestation.json` can be inspected with `--no-require-attestation` for diagnostics only (not valid for audit-grade decisions)
 - `audit-validate` supports `--profile audit-grade` to require signature/finalize/policy/review artifacts in addition to schema + semantic checks
+- In `audit-validate --profile audit-grade`, `run_artifacts/run_summary.json` and `run_artifacts/submission_metrics.json` are required, checksummed, and contract-validated (schema + semantic)
 - `finalize-run --audit-grade` now includes `audit-validate` and handoff generation in one command (`--write-handoff` defaults to ON in audit-grade mode)
 - Policy defaults are configurable in `configs/policy.yaml` and policy source/hash are recorded in `policy_report.json`
 - Runtime defaults (schemas + policy) are bundled in package resources, so `policy-check` and `audit-validate` work even when running outside the repo root

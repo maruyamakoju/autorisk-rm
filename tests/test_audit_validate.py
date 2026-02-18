@@ -429,3 +429,62 @@ def test_audit_validate_applies_multi_video_semantics_for_run_summary(sample_run
         and "failed_sources mismatch" in issue.detail
         for issue in res.issues
     )
+
+
+def test_audit_validate_applies_multi_video_semantics_for_submission_metrics(sample_run_dir: Path) -> None:
+    submission_metrics_path = sample_run_dir / "submission_metrics.json"
+    submission_metrics_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at_utc": "2026-02-18T00:00:00+00:00",
+                "sources_total": 1,
+                "sources_available": 1,
+                "clips_total": 3,
+                "sources": [
+                    {
+                        "name": "public",
+                        "config_path": "configs/public.yaml",
+                        "output_dir": str(sample_run_dir),
+                        "available": True,
+                        "clip_count": 3,
+                        "parse_success_count": 5,
+                        "parse_success_rate": 0.2,
+                        "severity_counts": {"NONE": 1, "LOW": 1, "MEDIUM": 1, "HIGH": 1},
+                        "accuracy": 0.3,
+                        "macro_f1": 0.3,
+                        "checklist_mean_total": 5.0,
+                        "mean_confidence": 0.5,
+                        "grounding_mean_score": 0.9,
+                        "ttc": {
+                            "n_positive_min_ttc": 1,
+                            "mean_min_ttc": 0.5,
+                            "min_min_ttc": 0.5,
+                            "spearman_rho_vs_severity": None,
+                            "spearman_p_value": None,
+                            "spearman_n": 1,
+                        },
+                        "fused_signal": {},
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=False,
+    )
+    res = validate_audit_pack(pack_res.output_dir, semantic_checks=True)
+    assert res.ok is False
+    assert any(
+        issue.kind == "semantic_error"
+        and issue.path == "run_artifacts/submission_metrics.json"
+        and "parse_success_count" in issue.detail
+        for issue in res.issues
+    )

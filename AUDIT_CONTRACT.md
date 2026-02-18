@@ -23,7 +23,17 @@ This document defines the audit contract enforced by:
 - `run_artifacts/review_diff_report.json`
 - `run_artifacts/audit_validate_report.json`
 - `run_artifacts/finalize_record.json`
+- `run_artifacts/run_summary.json`
+- `run_artifacts/submission_metrics.json`
 - `human_review/*.jsonl`
+
+## Audit-Grade Required Additions
+
+When validating with `--profile audit-grade`, the following are required and
+must be checksummed inside PACK:
+
+- `run_artifacts/run_summary.json` (schema + semantic contract)
+- `run_artifacts/submission_metrics.json` (schema + semantic contract)
 
 ## Integrity and Authenticity
 
@@ -57,6 +67,8 @@ This document defines the audit contract enforced by:
 - `candidate_rank` must be positive, non-duplicated, and gap-free.
 - `severity` must be one of `NONE/LOW/MEDIUM/HIGH`.
 - `manifest.summary.records` must match `decision_trace.jsonl` row count.
+- `run_artifacts/run_summary.json` and `run_artifacts/submission_metrics.json`
+  must pass multi-video schema + semantic checks.
 - `review.record_sha256` in reviewed results must exist in bundled review log.
 - `finalize_record.pack_fingerprint` must match `SHA256(checksums.sha256.txt)`.
 - `PACK`-internal `run_artifacts/finalize_record.json` must keep `handoff_*` empty and use `handoff_anchor_*` (if present) to avoid circular dependencies.

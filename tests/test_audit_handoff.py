@@ -128,6 +128,10 @@ def test_build_audit_handoff_creates_single_submission_bundle(sample_run_dir: Pa
     assert "audit-verify -p PACK.zip --profile audit-grade" in guide_text
     assert "--expect-pack-fingerprint <TICKET_FP>" in guide_text
     assert "--require-signature" not in guide_text
+    assert guide_text.count("2.3 Validate audit contract:") == 1
+    assert guide_text.count("3. Optional: inspect bundled validation report:") == 1
+    assert guide_text.count("run_artifacts/run_summary.json") == 1
+    assert guide_text.count("run_artifacts/submission_metrics.json") == 1
 
     rows = set(_parse_checksum_rows(res.checksums_path))
     # PACK.zip is verified via audit-verify (signature+attestation), not via handoff checksums.
