@@ -50,7 +50,7 @@ jobs:
 
       - name: Unit Tests (Source Tree)
         run: |
-          pytest -q
+          python -m pytest -q
 
       - name: Multi-Video Contract Smoke (Source Tree)
         run: |
