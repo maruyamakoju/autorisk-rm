@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Submission Metrics",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at_utc",
+    "sources_total",
+    "sources_available",
+    "clips_total",
+    "sources"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "generated_at_utc": { "type": "string", "minLength": 1 },
+    "sources_total": { "type": "integer", "minimum": 0 },
+    "sources_available": { "type": "integer", "minimum": 0 },
+    "clips_total": { "type": "integer", "minimum": 0 },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "config_path",
+          "output_dir",
+          "available",
+          "clip_count",
+          "parse_success_count",
+          "parse_success_rate",
+          "severity_counts",
+          "accuracy",
+          "macro_f1",
+          "checklist_mean_total",
+          "mean_confidence",
+          "grounding_mean_score",
+          "ttc",
+          "fused_signal"
+        ],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "config_path": { "type": "string", "minLength": 1 },
+          "output_dir": { "type": "string", "minLength": 1 },
+          "available": { "type": "boolean" },
+          "clip_count": { "type": "integer", "minimum": 0 },
+          "parse_success_count": { "type": "integer", "minimum": 0 },
+          "parse_success_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+          "severity_counts": {
+            "type": "object",
+            "required": ["NONE", "LOW", "MEDIUM", "HIGH"],
+            "properties": {
+              "NONE": { "type": "integer", "minimum": 0 },
+              "LOW": { "type": "integer", "minimum": 0 },
+              "MEDIUM": { "type": "integer", "minimum": 0 },
+              "HIGH": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "accuracy": { "type": "number" },
+          "macro_f1": { "type": "number" },
+          "checklist_mean_total": { "type": "number" },
+          "mean_confidence": { "type": "number" },
+          "grounding_mean_score": { "type": "number" },
+          "ttc": {
+            "type": "object",
+            "required": [
+              "n_positive_min_ttc",
+              "mean_min_ttc",
+              "min_min_ttc",
+              "spearman_rho_vs_severity",
+              "spearman_p_value",
+              "spearman_n"
+            ],
+            "properties": {
+              "n_positive_min_ttc": { "type": "integer", "minimum": 0 },
+              "mean_min_ttc": { "type": ["number", "null"] },
+              "min_min_ttc": { "type": ["number", "null"] },
+              "spearman_rho_vs_severity": { "type": ["number", "null"] },
+              "spearman_p_value": { "type": ["number", "null"] },
+              "spearman_n": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "fused_signal": {
+            "type": "object",
+            "properties": {
+              "spearman_rho": { "type": "number" },
+              "spearman_p": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Run Summary",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "started_at_utc",
+    "finished_at_utc",
+    "elapsed_sec",
+    "dry_run",
+    "resume",
+    "fail_fast",
+    "skip",
+    "sources",
+    "ok",
+    "failed_sources"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "started_at_utc": { "type": "string", "minLength": 1 },
+    "finished_at_utc": { "type": "string", "minLength": 1 },
+    "elapsed_sec": { "type": "number", "minimum": 0 },
+    "dry_run": { "type": "boolean" },
+    "resume": { "type": "boolean" },
+    "fail_fast": { "type": "boolean" },
+    "skip": {
+      "type": "object",
+      "required": ["supplement", "ttc", "grounding", "report"],
+      "properties": {
+        "supplement": { "type": "boolean" },
+        "ttc": { "type": "boolean" },
+        "grounding": { "type": "boolean" },
+        "report": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "config_path",
+          "output_dir",
+          "default_video_path",
+          "started_at_utc",
+          "finished_at_utc",
+          "elapsed_sec",
+          "ok",
+          "steps",
+          "clips_total",
+          "results_done_before",
+          "results_done_after_infer",
+          "clips_total_after_infer"
+        ],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "config_path": { "type": "string", "minLength": 1 },
+          "output_dir": { "type": "string", "minLength": 1 },
+          "default_video_path": { "type": "string" },
+          "started_at_utc": { "type": "string", "minLength": 1 },
+          "finished_at_utc": { "type": "string", "minLength": 1 },
+          "elapsed_sec": { "type": "number", "minimum": 0 },
+          "ok": { "type": "boolean" },
+          "clips_total": { "type": "integer", "minimum": 0 },
+          "results_done_before": { "type": "integer", "minimum": 0 },
+          "results_done_after_infer": { "type": "integer", "minimum": 0 },
+          "clips_total_after_infer": { "type": "integer", "minimum": 0 },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["label", "ok", "returncode", "elapsed_sec"],
+              "properties": {
+                "label": { "type": "string", "minLength": 1 },
+                "ok": { "type": "boolean" },
+                "skipped": { "type": "boolean" },
+                "reason": { "type": "string" },
+                "cmd": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "dry_run": { "type": "boolean" },
+                "returncode": { "type": "integer" },
+                "elapsed_sec": { "type": "number", "minimum": 0 }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "ok": { "type": "boolean" },
+    "failed_sources": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

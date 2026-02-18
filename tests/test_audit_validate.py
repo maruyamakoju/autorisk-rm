@@ -96,6 +96,8 @@ def test_audit_validate_audit_grade_profile_requires_artifacts(sample_run_dir: P
     assert "signature.json" in missing
     assert "run_artifacts/finalize_record.json" in missing
     assert "run_artifacts/audit_validate_report.json" in missing
+    assert "run_artifacts/run_summary.json" in missing
+    assert "run_artifacts/submission_metrics.json" in missing
     assert "run_artifacts/policy_snapshot.json" in missing
     assert "run_artifacts/review_apply_report.json" in missing
     assert "run_artifacts/review_diff_report.json" in missing
@@ -360,3 +362,70 @@ def test_audit_pack_sanitizes_finalize_record_for_pack_contract(sample_run_dir: 
     packed_finalize_path.write_text(json.dumps(packed_finalize, ensure_ascii=False, indent=2), encoding="utf-8")
     res = validate_audit_pack(pack_res.output_dir, semantic_checks=True)
     assert res.ok is True
+
+
+def test_audit_validate_applies_multi_video_semantics_for_run_summary(sample_run_dir: Path) -> None:
+    run_summary_path = sample_run_dir / "run_summary.json"
+    run_summary_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "started_at_utc": "2026-02-18T00:00:00+00:00",
+                "finished_at_utc": "2026-02-18T00:00:01+00:00",
+                "elapsed_sec": 1.0,
+                "dry_run": False,
+                "resume": True,
+                "fail_fast": False,
+                "skip": {
+                    "supplement": False,
+                    "ttc": False,
+                    "grounding": False,
+                    "report": False,
+                },
+                "sources": [
+                    {
+                        "name": "public",
+                        "config_path": "configs/public.yaml",
+                        "output_dir": str(sample_run_dir),
+                        "default_video_path": "",
+                        "started_at_utc": "2026-02-18T00:00:00+00:00",
+                        "finished_at_utc": "2026-02-18T00:00:01+00:00",
+                        "elapsed_sec": 1.0,
+                        "ok": False,
+                        "clips_total": 1,
+                        "results_done_before": 0,
+                        "results_done_after_infer": 0,
+                        "clips_total_after_infer": 1,
+                        "steps": [
+                            {
+                                "label": "public/infer",
+                                "ok": True,
+                                "returncode": 0,
+                                "elapsed_sec": 1.0,
+                            }
+                        ],
+                    }
+                ],
+                "ok": True,
+                "failed_sources": 0,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=False,
+    )
+    res = validate_audit_pack(pack_res.output_dir, semantic_checks=True)
+    assert res.ok is False
+    assert any(
+        issue.kind == "semantic_error"
+        and issue.path == "run_artifacts/run_summary.json"
+        and "failed_sources mismatch" in issue.detail
+        for issue in res.issues
+    )

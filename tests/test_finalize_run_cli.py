@@ -112,6 +112,10 @@ def test_finalize_run_audit_grade_accepts_keyring_anchor(sample_run_dir: Path, t
 
     finalize_record_path = sample_run_dir / "finalize_record.json"
     assert finalize_record_path.exists()
+    run_summary_path = sample_run_dir / "run_summary.json"
+    submission_metrics_path = sample_run_dir / "submission_metrics.json"
+    assert run_summary_path.exists()
+    assert submission_metrics_path.exists()
     finalize_record = json.loads(finalize_record_path.read_text(encoding="utf-8"))
     assert finalize_record["audit_grade"] is True
     assert finalize_record["pack_fingerprint"] == verify_res.checksums_sha256
@@ -150,6 +154,11 @@ def test_finalize_run_audit_grade_accepts_keyring_anchor(sample_run_dir: Path, t
         members = set(zf.namelist())
         assert "run_artifacts/audit_validate_report.json" in members
         assert "run_artifacts/finalize_record.json" in members
+        assert "run_artifacts/run_summary.json" in members
+        assert "run_artifacts/submission_metrics.json" in members
+        checksums_text = zf.read("checksums.sha256.txt").decode("utf-8")
+        assert "  run_artifacts/run_summary.json" in checksums_text
+        assert "  run_artifacts/submission_metrics.json" in checksums_text
         packed_finalize = json.loads(zf.read("run_artifacts/finalize_record.json").decode("utf-8"))
 
     # PACK-internal finalize record keeps handoff anchors and avoids circular handoff hashes.

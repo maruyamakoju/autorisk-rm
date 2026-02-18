@@ -24,6 +24,7 @@ outputs/
 data/videos/
 data/clips/
 data/public_samples/
+data/multi_video/
 *.mp4
 *.avi
 *.mkv

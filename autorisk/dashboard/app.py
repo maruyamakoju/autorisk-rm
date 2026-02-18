@@ -11,7 +11,7 @@ from pathlib import Path
 import streamlit as st
 
 from autorisk.dashboard.data_loader import load_data
-from autorisk.dashboard.pages import depth, evaluation, explorer, overview, signals
+from autorisk.dashboard.pages import comparison, depth, evaluation, explorer, overview, signals
 
 # --- Page Config ---
 st.set_page_config(
@@ -68,16 +68,38 @@ with st.sidebar:
     )
     st.divider()
 
-    # Run directory selector
-    default_run = str(Path(__file__).resolve().parent.parent.parent / "outputs" / "public_run")
-    run_dir = st.text_input("Run Directory", value=default_run)
+    # Run directory selector - auto-detect available runs
+    outputs_root = Path(__file__).resolve().parent.parent.parent / "outputs"
+    available_runs = {}
+    run_labels = {
+        "public_run": "UK Urban (Daytime)",
+        "japan_run": "Japan (Urban)",
+        "winter_run": "Winter / Snow",
+        "us_highway_run": "US Highway",
+    }
+    if outputs_root.exists():
+        for d in sorted(outputs_root.iterdir()):
+            if d.is_dir() and (d / "cosmos_results.json").exists():
+                label = run_labels.get(d.name, d.name)
+                available_runs[label] = str(d)
+
+    if available_runs:
+        selected_label = st.selectbox(
+            "Select Run",
+            list(available_runs.keys()),
+            index=0,
+        )
+        run_dir = available_runs[selected_label]
+    else:
+        default_run = str(outputs_root / "public_run")
+        run_dir = st.text_input("Run Directory", value=default_run)
 
     st.divider()
 
     # Navigation
     page = st.radio(
         "Navigation",
-        ["Overview", "Clip Explorer", "Evaluation", "Signal Analysis", "Technical Depth"],
+        ["Overview", "Clip Explorer", "Evaluation", "Signal Analysis", "Technical Depth", "Cross-Run Comparison"],
         index=0,
         label_visibility="collapsed",
     )
@@ -101,6 +123,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+warnings = list(data.get("load_warnings", []))
+if warnings:
+    st.warning(
+        f"Data load completed with {len(warnings)} warning(s). Some dashboard sections may be partial."
+    )
+    with st.expander("Show data load warnings"):
+        for msg in warnings[:100]:
+            st.text(f"- {msg}")
+        if len(warnings) > 100:
+            st.text(f"... ({len(warnings) - 100} more)")
+
 # --- Page Routing ---
 if page == "Overview":
     overview.render(data)
@@ -112,3 +145,5 @@ elif page == "Signal Analysis":
     signals.render(data)
 elif page == "Technical Depth":
     depth.render(data)
+elif page == "Cross-Run Comparison":
+    comparison.render(data)

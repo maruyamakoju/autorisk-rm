@@ -14,13 +14,23 @@ def render(data: dict) -> None:
     candidates = data["candidates"]
     gt = data["gt_labels"]
 
+    has_eval = bool(eval_rep.get("accuracy"))
+
     # --- KPI Row ---
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Clips Analyzed", len(cosmos))
-    k2.metric("Accuracy", f"{eval_rep.get('accuracy', 0):.1%}")
-    k3.metric("Macro-F1", f"{eval_rep.get('macro_f1', 0):.3f}")
+    parse_ok = sum(1 for r in cosmos if r.get("parse_success"))
+    k2.metric(
+        "Accuracy" if has_eval else "Parse Success",
+        f"{eval_rep.get('accuracy', 0):.1%}" if has_eval else f"{parse_ok}/{len(cosmos)}",
+    )
+    k3.metric(
+        "Macro-F1" if has_eval else "MEDIUM/HIGH",
+        f"{eval_rep.get('macro_f1', 0):.3f}" if has_eval
+        else sum(1 for r in cosmos if r.get("severity") in ("MEDIUM", "HIGH")),
+    )
     checklist = eval_rep.get("checklist_means", {}).get("mean_total", 0)
-    k4.metric("Checklist", f"{checklist:.1f} / 5")
+    k4.metric("Checklist", f"{checklist:.1f} / 5" if checklist else "N/A")
 
     st.divider()
 
@@ -34,10 +44,6 @@ def render(data: dict) -> None:
             sev = r.get("severity", "NONE")
             pred_counts[sev] = pred_counts.get(sev, 0) + 1
 
-        gt_counts = {s: 0 for s in SEVERITY_ORDER}
-        for sev in gt.values():
-            gt_counts[sev] = gt_counts.get(sev, 0) + 1
-
         fig = go.Figure()
         fig.add_trace(go.Bar(
             name="Predicted",
@@ -47,16 +53,21 @@ def render(data: dict) -> None:
             text=[pred_counts[s] for s in SEVERITY_ORDER],
             textposition="outside",
         ))
-        fig.add_trace(go.Bar(
-            name="Ground Truth",
-            x=SEVERITY_ORDER,
-            y=[gt_counts[s] for s in SEVERITY_ORDER],
-            marker_color=[SEVERITY_COLORS[s] for s in SEVERITY_ORDER],
-            marker_pattern_shape="/",
-            text=[gt_counts[s] for s in SEVERITY_ORDER],
-            textposition="outside",
-            opacity=0.6,
-        ))
+
+        if gt:
+            gt_counts = {s: 0 for s in SEVERITY_ORDER}
+            for sev in gt.values():
+                gt_counts[sev] = gt_counts.get(sev, 0) + 1
+            fig.add_trace(go.Bar(
+                name="Ground Truth",
+                x=SEVERITY_ORDER,
+                y=[gt_counts[s] for s in SEVERITY_ORDER],
+                marker_color=[SEVERITY_COLORS[s] for s in SEVERITY_ORDER],
+                marker_pattern_shape="/",
+                text=[gt_counts[s] for s in SEVERITY_ORDER],
+                textposition="outside",
+                opacity=0.6,
+            ))
         fig.update_layout(
             template="plotly_dark",
             paper_bgcolor="rgba(0,0,0,0)",
@@ -70,9 +81,9 @@ def render(data: dict) -> None:
         st.plotly_chart(fig, width="stretch")
 
     with col_right:
-        st.subheader("Prediction Accuracy by Class")
         per_class = data["analysis_report"].get("per_class_metrics", [])
         if per_class:
+            st.subheader("Prediction Accuracy by Class")
             labels = [m["label"] for m in per_class]
             fig2 = go.Figure()
             for metric_name, color in [("precision", "#818CF8"), ("recall", "#34D399"), ("f1", "#FBBF24")]:
@@ -95,6 +106,32 @@ def render(data: dict) -> None:
                 yaxis_range=[0, 1.15],
             )
             st.plotly_chart(fig2, width="stretch")
+        else:
+            st.subheader("Hazard Types")
+            hazard_types: dict[str, int] = {}
+            for r in cosmos:
+                for h in r.get("hazards", []):
+                    ht = h.get("type", "Unknown")
+                    hazard_types[ht] = hazard_types.get(ht, 0) + 1
+            if hazard_types:
+                sorted_ht = sorted(hazard_types.items(), key=lambda x: -x[1])
+                fig2 = go.Figure(go.Bar(
+                    x=[h[1] for h in sorted_ht],
+                    y=[h[0] for h in sorted_ht],
+                    orientation="h",
+                    marker_color="#818CF8",
+                ))
+                fig2.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    height=350,
+                    margin=dict(t=30, b=40, l=150, r=20),
+                    xaxis_title="Count",
+                )
+                st.plotly_chart(fig2, width="stretch")
+            else:
+                st.info("No hazard data available yet.")
 
     st.divider()
 
@@ -111,7 +148,7 @@ def render(data: dict) -> None:
                 if r.get("candidate_rank") == c["rank"]:
                     sev = r.get("severity", "NONE")
                     break
-            gt_sev = gt.get(clip_name, "?")
+            gt_sev = gt.get(clip_name, "N/A") if gt else "N/A"
 
             fig3.add_trace(go.Bar(
                 y=[f"#{c['rank']:02d}"],

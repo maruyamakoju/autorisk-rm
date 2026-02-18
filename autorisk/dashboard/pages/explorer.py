@@ -44,8 +44,9 @@ def render(data: dict) -> None:
         rank = r["candidate_rank"]
         sev = r.get("severity", "NONE")
         clip_name = Path(r["clip_path"]).name
-        gt_sev = gt.get(clip_name, "?")
-        label = f"#{rank:02d}  |  {sev}  (GT: {gt_sev})  |  {clip_name}"
+        gt_sev = gt.get(clip_name, "") if gt else ""
+        gt_str = f"  (GT: {gt_sev})" if gt_sev else ""
+        label = f"#{rank:02d}  |  {sev}{gt_str}  |  {clip_name}"
         clip_options.append((label, rank))
 
     selected_label = st.selectbox(

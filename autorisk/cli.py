@@ -98,6 +98,114 @@ def _autorisk_version() -> str:
             return "unknown"
 
 
+def _build_finalize_run_contract_artifacts(
+    *,
+    run_dir: Path,
+    policy_source: dict[str, object],
+) -> tuple[Path, object, Path, object]:
+    """Generate and validate multi-video contract artifacts for finalize-run."""
+    from autorisk.multi_video.submission_metrics import (
+        source_submission_summary,
+        write_submission_metrics,
+    )
+    from autorisk.multi_video.validate import (
+        validate_multi_video_run_summary,
+        validate_submission_metrics,
+    )
+
+    run_dir_path = run_dir.resolve()
+    clips_dir = run_dir_path / "clips"
+    results_path = run_dir_path / "cosmos_results.json"
+    run_name = run_dir_path.name or "run"
+
+    clips_total = len(list(clips_dir.glob("candidate_*.mp4"))) if clips_dir.exists() else 0
+    results_done = 0
+    if results_path.exists():
+        try:
+            payload = json.loads(results_path.read_text(encoding="utf-8"))
+            if isinstance(payload, list):
+                results_done = len(payload)
+        except Exception:
+            results_done = 0
+
+    now_iso = _utc_now_iso()
+    config_hint = str(policy_source.get("policy_path", "") or "configs/policy.yaml")
+    run_summary_payload: dict[str, object] = {
+        "schema_version": 1,
+        "started_at_utc": now_iso,
+        "finished_at_utc": now_iso,
+        "elapsed_sec": 0.0,
+        "dry_run": True,
+        "resume": True,
+        "fail_fast": False,
+        "skip": {
+            "supplement": True,
+            "ttc": True,
+            "grounding": True,
+            "report": True,
+        },
+        "sources": [
+            {
+                "name": run_name,
+                "config_path": config_hint,
+                "output_dir": str(run_dir_path),
+                "default_video_path": "",
+                "started_at_utc": now_iso,
+                "finished_at_utc": now_iso,
+                "elapsed_sec": 0.0,
+                "ok": True,
+                "clips_total": int(clips_total),
+                "results_done_before": int(results_done),
+                "results_done_after_infer": int(results_done),
+                "clips_total_after_infer": int(clips_total),
+                "steps": [
+                    {
+                        "label": "finalize-run/contracts",
+                        "ok": True,
+                        "skipped": True,
+                        "reason": "generated during finalize-run",
+                        "returncode": 0,
+                        "elapsed_sec": 0.0,
+                    }
+                ],
+            }
+        ],
+        "ok": True,
+        "failed_sources": 0,
+    }
+    run_summary_path = run_dir_path / "run_summary.json"
+    _write_json(run_summary_path, run_summary_payload)
+    run_summary_validate_res = validate_multi_video_run_summary(run_summary_path)
+
+    source_summary = source_submission_summary(
+        repo_root=run_dir_path.parent,
+        source={
+            "name": run_name,
+            "config_path": config_hint,
+            "output_dir": str(run_dir_path),
+        },
+    )
+    submission_payload = {
+        "schema_version": 1,
+        "generated_at_utc": _utc_now_iso(),
+        "sources_total": 1,
+        "sources_available": 1 if bool(source_summary.get("available", False)) else 0,
+        "clips_total": int(source_summary.get("clip_count", 0)),
+        "sources": [source_summary],
+    }
+    submission_metrics_path = write_submission_metrics(
+        submission_payload,
+        output_path=run_dir_path / "submission_metrics.json",
+    )
+    submission_metrics_validate_res = validate_submission_metrics(submission_metrics_path)
+    return (
+        run_summary_path,
+        run_summary_validate_res,
+        submission_metrics_path,
+        submission_metrics_validate_res,
+    )
+
+
 def _upsert_zip_member(zip_path: Path, member_name: str, payload: bytes) -> None:
     with tempfile.TemporaryDirectory(prefix="autorisk-finalize-") as tmp_dir:
         tmp_zip = Path(tmp_dir) / zip_path.name
@@ -1514,6 +1622,31 @@ def finalize_run(
     if enforce and not policy_res.passed:
         raise SystemExit(2)
 
+    if audit_grade:
+        (
+            run_summary_path,
+            run_summary_validate_res,
+            submission_metrics_path,
+            submission_metrics_validate_res,
+        ) = _build_finalize_run_contract_artifacts(
+            run_dir=Path(run_dir),
+            policy_source=policy_source,
+        )
+        run_summary_issues = len(run_summary_validate_res.issues)
+        submission_metrics_issues = len(submission_metrics_validate_res.issues)
+        click.echo(
+            f"[2.5/4] multi-validate: run_summary_issues={run_summary_issues} "
+            f"submission_metrics_issues={submission_metrics_issues}"
+        )
+        click.echo(f"        run_summary={run_summary_path}")
+        click.echo(f"        submission_metrics={submission_metrics_path}")
+        for issue in run_summary_validate_res.issues[:20]:
+            click.echo(f"- run_summary {issue.kind}: {issue.detail}".rstrip(), err=True)
+        for issue in submission_metrics_validate_res.issues[:20]:
+            click.echo(f"- submission_metrics {issue.kind}: {issue.detail}".rstrip(), err=True)
+        if run_summary_issues > 0 or submission_metrics_issues > 0:
+            raise SystemExit(2)
+
     cfg = (ctx.obj or {}).get("cfg")
     pack_res = build_audit_pack(
         run_dir=run_dir,
@@ -1784,6 +1917,142 @@ def finalize_run(
         click.echo(f"[4.7/4] audit-handoff: {handoff_res.output_dir}")
 
     click.echo(f"[4.8/4] finalize-record: {finalize_record_path}")
+
+@cli.command("multi-run")
+@click.option("--repo-root", default=".", show_default=True, help="Repository root containing configs/ and outputs/")
+@click.option("--only", default=None, help="Run only one source name (public/japan/winter/us_highway)")
+@click.option("--skip-supplement", is_flag=True, help="Skip supplement step")
+@click.option("--skip-ttc", is_flag=True, help="Skip TTC step")
+@click.option("--skip-grounding", is_flag=True, help="Skip grounding step")
+@click.option("--skip-report", is_flag=True, help="Skip report step")
+@click.option("--dry-run", is_flag=True, help="Print planned commands only")
+@click.option("--resume/--no-resume", default=True, show_default=True, help="Resume inference from existing results")
+@click.option("--fail-fast/--keep-going", default=False, show_default=True, help="Stop after first failed source")
+@click.option("--summary-path", default="outputs/multi_video/run_summary.json", show_default=True, help="Relative path for run summary JSON")
+@click.option("--validate-summary/--no-validate-summary", default=True, show_default=True, help="Validate run summary against schema + semantic checks")
+@click.option("--schema-dir", default=None, help="Optional schema directory override")
+def multi_run(
+    repo_root: str,
+    only: str | None,
+    skip_supplement: bool,
+    skip_ttc: bool,
+    skip_grounding: bool,
+    skip_report: bool,
+    dry_run: bool,
+    resume: bool,
+    fail_fast: bool,
+    summary_path: str,
+    validate_summary: bool,
+    schema_dir: str | None,
+) -> None:
+    """Run multi-source inference + analysis pipeline."""
+    from autorisk.multi_video.runner import RunAllOptions, run_all_sources
+    from autorisk.multi_video.validate import validate_multi_video_run_summary
+
+    root = Path(repo_root).expanduser().resolve()
+    options = RunAllOptions(
+        only=only,
+        skip_supplement=bool(skip_supplement),
+        skip_ttc=bool(skip_ttc),
+        skip_grounding=bool(skip_grounding),
+        skip_report=bool(skip_report),
+        dry_run=bool(dry_run),
+        resume=bool(resume),
+        fail_fast=bool(fail_fast),
+        summary_path=str(summary_path),
+    )
+    summary = run_all_sources(repo_root=root, options=options)
+    if validate_summary:
+        summary_abs = (root / options.summary_path).resolve()
+        validate_res = validate_multi_video_run_summary(summary_abs, schema_dir=schema_dir)
+        click.echo(
+            f"Validated run summary: ok={validate_res.ok} issues={len(validate_res.issues)} source={validate_res.source}"
+        )
+        if not validate_res.ok:
+            for issue in validate_res.issues[:20]:
+                click.echo(f"- {issue.kind}: {issue.path} {issue.detail}".rstrip(), err=True)
+            raise SystemExit(2)
+    if not bool(summary.get("ok", False)):
+        raise SystemExit(1)
+
+
+@cli.command("submission-metrics")
+@click.option("--repo-root", default=".", show_default=True, help="Repository root containing outputs/")
+@click.option("--only", default=None, help="Only include one source name")
+@click.option(
+    "--out",
+    "output_path",
+    default="outputs/multi_video/submission_metrics.json",
+    show_default=True,
+    help="Output JSON path",
+)
+@click.option("--validate/--no-validate", default=True, show_default=True, help="Validate metrics JSON against schema + semantic checks")
+@click.option("--schema-dir", default=None, help="Optional schema directory override")
+def submission_metrics(
+    repo_root: str,
+    only: str | None,
+    output_path: str,
+    validate: bool,
+    schema_dir: str | None,
+) -> None:
+    """Generate compact submission metrics across configured sources."""
+    from autorisk.multi_video.submission_metrics import (
+        build_submission_metrics,
+        write_submission_metrics,
+    )
+    from autorisk.multi_video.validate import validate_submission_metrics
+
+    root = Path(repo_root).expanduser().resolve()
+    payload = build_submission_metrics(repo_root=root, only=only)
+    out_path = write_submission_metrics(payload, output_path=root / output_path)
+    click.echo(f"Wrote: {out_path}")
+    if validate:
+        validate_res = validate_submission_metrics(out_path, schema_dir=schema_dir)
+        click.echo(
+            f"Validated submission metrics: ok={validate_res.ok} issues={len(validate_res.issues)} source={validate_res.source}"
+        )
+        if not validate_res.ok:
+            for issue in validate_res.issues[:20]:
+                click.echo(f"- {issue.kind}: {issue.path} {issue.detail}".rstrip(), err=True)
+            raise SystemExit(2)
+
+
+@cli.command("multi-validate")
+@click.option("--run-summary", required=True, help="Path to multi-run summary JSON")
+@click.option("--submission-metrics", "submission_metrics_path", default=None, help="Optional path to submission metrics JSON")
+@click.option("--schema-dir", default=None, help="Optional schema directory override")
+@click.option("--enforce/--no-enforce", default=True, show_default=True, help="Exit non-zero on validation issues")
+def multi_validate(
+    run_summary: str,
+    submission_metrics_path: str | None,
+    schema_dir: str | None,
+    enforce: bool,
+) -> None:
+    """Validate multi-video summary/metrics artifacts."""
+    from autorisk.multi_video.validate import (
+        validate_multi_video_run_summary,
+        validate_submission_metrics,
+    )
+
+    summary_res = validate_multi_video_run_summary(run_summary, schema_dir=schema_dir)
+    click.echo(f"run_summary: ok={summary_res.ok} issues={len(summary_res.issues)} source={summary_res.source}")
+    issue_count = len(summary_res.issues)
+    for issue in summary_res.issues[:20]:
+        click.echo(f"- {issue.kind}: {issue.path} {issue.detail}".rstrip(), err=True)
+
+    metrics_res = None
+    if submission_metrics_path is not None and str(submission_metrics_path).strip() != "":
+        metrics_res = validate_submission_metrics(submission_metrics_path, schema_dir=schema_dir)
+        click.echo(
+            f"submission_metrics: ok={metrics_res.ok} issues={len(metrics_res.issues)} source={metrics_res.source}"
+        )
+        issue_count += len(metrics_res.issues)
+        for issue in metrics_res.issues[:20]:
+            click.echo(f"- {issue.kind}: {issue.path} {issue.detail}".rstrip(), err=True)
+
+    if enforce and issue_count > 0:
+        raise SystemExit(2)
+
 
 @cli.command()
 @click.option("--run-dir", "-r", default=None, help="Run output directory")

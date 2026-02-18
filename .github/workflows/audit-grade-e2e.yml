@@ -52,15 +52,78 @@ jobs:
         run: |
           pytest -q
 
+      - name: Multi-Video Contract Smoke (Source Tree)
+        run: |
+          python -m autorisk.cli multi-run --repo-root . --dry-run --skip-supplement --skip-ttc --skip-grounding --skip-report
+          python -m autorisk.cli submission-metrics --repo-root . --out outputs/multi_video/submission_metrics_ci.json
+          python -m autorisk.cli multi-validate --run-summary outputs/multi_video/run_summary.json --submission-metrics outputs/multi_video/submission_metrics_ci.json --enforce
+
       - name: Build and Install Wheel
         run: |
           python -m build --wheel
-          python -m pip install --force-reinstall dist/*.whl
+          python - <<'PY'
+          import glob
+          import subprocess
+          import sys
+
+          wheels = sorted(glob.glob("dist/*.whl"))
+          assert wheels, "wheel not found in dist/"
+          subprocess.check_call(
+              [sys.executable, "-m", "pip", "install", "--force-reinstall", f"{wheels[-1]}[dashboard]"]
+          )
+          PY
 
       - name: Prepare External Workdir
         run: |
           echo "WORKDIR=$(mktemp -d)" >> "$GITHUB_ENV"
           mkdir -p "$WORKDIR"
+
+      - name: Wheel Multi-Validate Smoke (Outside Repo)
+        run: |
+          SMOKE_DIR="$(mktemp -d)"
+          cd "$SMOKE_DIR"
+          python - <<'PY'
+          import json
+          import autorisk
+          from pathlib import Path
+
+          mod_path = str(Path(autorisk.__file__).resolve()).lower()
+          assert ("site-packages" in mod_path) or ("dist-packages" in mod_path), mod_path
+
+          run_summary = Path("run_summary.json")
+          run_summary.write_text(json.dumps({
+              "schema_version": 1,
+              "started_at_utc": "2026-02-18T00:00:00+00:00",
+              "finished_at_utc": "2026-02-18T00:00:01+00:00",
+              "elapsed_sec": 1.0,
+              "dry_run": True,
+              "resume": True,
+              "fail_fast": False,
+              "skip": {
+                  "supplement": True,
+                  "ttc": True,
+                  "grounding": True,
+                  "report": True
+              },
+              "sources": [],
+              "ok": True,
+              "failed_sources": 0
+          }, indent=2), encoding="utf-8")
+
+          submission_metrics = Path("submission_metrics.json")
+          submission_metrics.write_text(json.dumps({
+              "schema_version": 1,
+              "generated_at_utc": "2026-02-18T00:00:01+00:00",
+              "sources_total": 0,
+              "sources_available": 0,
+              "clips_total": 0,
+              "sources": []
+          }, indent=2), encoding="utf-8")
+          PY
+          python -m autorisk.cli multi-validate \
+            --run-summary "run_summary.json" \
+            --submission-metrics "submission_metrics.json" \
+            --enforce
 
       - name: Create Sample Run Inputs (Outside Repo)
         run: |
@@ -118,6 +181,21 @@ jobs:
               f"2,20.0,15.0,25.0,0.41,{clips_dir / 'candidate_002.mp4'},\"{{'audio':0.3,'motion':0.1,'proximity':0.2}}\"\n",
               encoding="utf-8",
           )
+          PY
+
+      - name: Dashboard Smoke (Outside Repo)
+        run: |
+          cd "$WORKDIR"
+          python - <<'PY'
+          from autorisk.dashboard.data_loader import load_data
+          from autorisk.dashboard.pages import comparison, depth, evaluation, explorer, overview, signals
+
+          data = load_data("outputs/ci_audit_run")
+          assert isinstance(data, dict)
+          assert isinstance(data.get("cosmos_results"), list)
+          for page in [overview, explorer, evaluation, signals, depth, comparison]:
+              assert callable(page.render)
+          print("Dashboard smoke passed.")
           PY
 
       - name: Create Signing Keys and Keyring (Outside Repo)
@@ -280,7 +358,17 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install build click omegaconf python-dotenv cryptography pydantic numpy scipy opencv-python tqdm jsonschema
           python -m build --sdist
-          python -m pip install --force-reinstall dist/*.tar.gz
+          python - <<'PY'
+          import glob
+          import subprocess
+          import sys
+
+          sdists = sorted(glob.glob("dist/*.tar.gz"))
+          assert sdists, "sdist not found in dist/"
+          subprocess.check_call(
+              [sys.executable, "-m", "pip", "install", "--force-reinstall", f"{sdists[-1]}[dashboard]"]
+          )
+          PY
 
       - name: Smoke Test Outside Repo
         run: |
@@ -314,6 +402,16 @@ jobs:
           CSV
 
           python -m autorisk.cli policy-check -r outputs/sdist_run
+          python - <<'PY'
+          from autorisk.dashboard.data_loader import load_data
+          from autorisk.dashboard.pages import comparison, depth, evaluation, explorer, overview, signals
+
+          data = load_data("outputs/sdist_run")
+          assert isinstance(data, dict)
+          for page in [overview, explorer, evaluation, signals, depth, comparison]:
+              assert callable(page.render)
+          print("Dashboard smoke (sdist) passed.")
+          PY
           python -m autorisk.cli audit-pack -r outputs/sdist_run --no-include-clips --zip
           PACK_ZIP="$(ls -1 outputs/sdist_run/audit_pack_*.zip | tail -n 1)"
           python -m autorisk.cli audit-validate -p "$PACK_ZIP" --enforce

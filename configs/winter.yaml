@@ -1,0 +1,33 @@
+# AutoRisk-RM Winter/Snow Conditions Configuration
+# Source: YouTube dashcam compilation - winter driving incidents
+
+general:
+  output_dir: "outputs/winter_run"
+
+video:
+  segment_padding_sec: 5
+  clip_fps: 10
+  resize_short_edge: 360
+
+mining:
+  top_n: 10
+  audio:
+    weight: 0.10           # Low: compilation may have music
+  motion:
+    weight: 0.55           # High: scene cuts + sliding
+  proximity:
+    weight: 0.35           # Moderate
+
+cosmos:
+  backend: "local"
+  local:
+    model_name: "nvidia/Cosmos-Reason2-8B"
+    max_new_tokens: 4096
+    temperature: 0.2
+    torch_dtype: "float16"
+    timeout_sec: 600
+  local_fps: 4
+
+report:
+  format: "html"
+  top_n_examples: 10

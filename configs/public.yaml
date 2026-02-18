@@ -5,7 +5,7 @@
 #    Collisions, And Near-Misses" by JA Dashcam UK
 
 general:
-  output_dir: "outputs/public"
+  output_dir: "outputs/public_run"
 
 video:
   segment_padding_sec: 5

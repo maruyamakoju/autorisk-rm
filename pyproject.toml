@@ -30,6 +30,10 @@ dependencies = [
 dev = [
     "yt-dlp>=2024.1",
 ]
+dashboard = [
+    "streamlit>=1.32",
+    "plotly>=5.20",
+]
 
 [project.scripts]
 autorisk = "autorisk.cli:cli"

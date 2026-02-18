@@ -607,6 +607,8 @@ def build_audit_pack(
     run_files = [
         cosmos_results_path,
         candidates_csv_path,
+        run_dir_path / "run_summary.json",
+        run_dir_path / "submission_metrics.json",
         run_dir_path / _FINALIZE_RECORD_FILENAME,
         run_dir_path / _VALIDATE_REPORT_FILENAME,
         run_dir_path / "cosmos_results_reviewed.json",

@@ -408,12 +408,33 @@ class CosmosInferenceEngine:
             parse_success=parse_success,
         )
 
+    def _load_existing_results(
+        self, output_dir: Path,
+    ) -> list[CosmosResponse]:
+        """Load existing cosmos_results.json for resume support."""
+        results_path = Path(output_dir) / "cosmos_results.json"
+        if not results_path.exists():
+            return []
+
+        try:
+            with open(results_path, encoding="utf-8") as f:
+                raw_results = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return []
+
+        responses = [CosmosResponse.from_dict(r) for r in raw_results]
+        log.info("Loaded %d existing results from %s", len(responses), results_path)
+        return responses
+
     def infer_batch(
         self,
         candidates: list[Candidate],
         output_dir: Path | None = None,
     ) -> list[CosmosResponse]:
         """Run inference on a batch of candidates.
+
+        Supports resume: if output_dir contains cosmos_results.json,
+        already-processed clips are skipped.
 
         Args:
             candidates: List of mining candidates with clip paths.
@@ -423,8 +444,22 @@ class CosmosInferenceEngine:
             List of CosmosResponse objects.
         """
         responses: list[CosmosResponse] = []
+        done_clips: set[str] = set()
 
-        for cand in tqdm(candidates, desc="Cosmos inference"):
+        # Resume: load existing results and skip already-processed clips
+        if output_dir is not None:
+            existing = self._load_existing_results(output_dir)
+            if existing:
+                responses.extend(existing)
+                done_clips = {r.request.clip_path for r in existing}
+                log.info(
+                    "Resuming: %d/%d clips already done",
+                    len(done_clips), len(candidates),
+                )
+
+        remaining = [c for c in candidates if c.clip_path not in done_clips]
+
+        for cand in tqdm(remaining, desc="Cosmos inference"):
             request = CosmosRequest(
                 clip_path=cand.clip_path,
                 candidate_rank=cand.rank,

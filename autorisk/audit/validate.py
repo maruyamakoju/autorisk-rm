@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import tempfile
 import zipfile
 from dataclasses import asdict, dataclass
 from importlib import resources as importlib_resources
@@ -26,6 +27,8 @@ _AUDIT_GRADE_REQUIRED_FILES = {
     "run_artifacts/finalize_record.json",
     "run_artifacts/audit_validate_report.json",
     "run_artifacts/policy_snapshot.json",
+    "run_artifacts/run_summary.json",
+    "run_artifacts/submission_metrics.json",
     "run_artifacts/review_apply_report.json",
     "run_artifacts/review_diff_report.json",
     "run_artifacts/cosmos_results_reviewed.json",
@@ -87,6 +90,8 @@ _TARGETS = [
     _SchemaTarget("run_artifacts/review_queue.json", "review_queue.schema.json", required=False),
     _SchemaTarget("run_artifacts/policy_snapshot.json", "policy_snapshot.schema.json", required=False),
     _SchemaTarget("run_artifacts/audit_validate_report.json", "audit_validate_report.schema.json", required=False),
+    _SchemaTarget("run_artifacts/run_summary.json", "run_summary.schema.json", required=False),
+    _SchemaTarget("run_artifacts/submission_metrics.json", "submission_metrics.schema.json", required=False),
     _SchemaTarget("run_artifacts/review_apply_report.json", "review_apply_report.schema.json", required=False),
     _SchemaTarget("run_artifacts/review_diff_report.json", "review_diff_report.schema.json", required=False),
     _SchemaTarget("run_artifacts/finalize_record.json", "finalize_record.schema.json", required=False),
@@ -912,6 +917,43 @@ def _semantic_check_finalize_record(
     return issues
 
 
+def _semantic_check_multi_video_artifact(
+    *,
+    rel_path: str,
+    payload: Any,
+    artifact_type: str,
+) -> list[ValidateIssue]:
+    """Reuse multi_video semantic checks for PACK-internal contract files."""
+    issues: list[ValidateIssue] = []
+    if not isinstance(payload, dict):
+        return issues
+
+    from autorisk.multi_video.validate import (
+        validate_multi_video_run_summary,
+        validate_submission_metrics,
+    )
+
+    with tempfile.TemporaryDirectory(prefix="autorisk-audit-validate-") as tmp_dir:
+        temp_path = Path(tmp_dir) / Path(rel_path).name
+        temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if artifact_type == "run_summary":
+            res = validate_multi_video_run_summary(temp_path)
+        else:
+            res = validate_submission_metrics(temp_path)
+
+    for issue in res.issues:
+        if issue.kind != "semantic_error":
+            continue
+        issues.append(
+            ValidateIssue(
+                kind="semantic_error",
+                path=rel_path,
+                detail=str(issue.detail)[:300],
+            )
+        )
+    return issues
+
+
 def _resolve_dir_accessor(source: Path) -> _DirPackAccessor:
     candidates = sorted(source.rglob(CHECKSUMS_FILENAME), key=lambda p: (len(p.parts), str(p)))
     if not candidates:
@@ -1086,6 +1128,25 @@ def validate_audit_pack(
         diff_obj = parsed_json.get("run_artifacts/review_diff_report.json")
         if isinstance(apply_obj, dict) and isinstance(diff_obj, dict):
             issues.extend(_semantic_check_review_reports(apply_obj, diff_obj))
+
+        run_summary_obj = parsed_json.get("run_artifacts/run_summary.json")
+        if isinstance(run_summary_obj, dict):
+            issues.extend(
+                _semantic_check_multi_video_artifact(
+                    rel_path="run_artifacts/run_summary.json",
+                    payload=run_summary_obj,
+                    artifact_type="run_summary",
+                )
+            )
+        submission_metrics_obj = parsed_json.get("run_artifacts/submission_metrics.json")
+        if isinstance(submission_metrics_obj, dict):
+            issues.extend(
+                _semantic_check_multi_video_artifact(
+                    rel_path="run_artifacts/submission_metrics.json",
+                    payload=submission_metrics_obj,
+                    artifact_type="submission_metrics",
+                )
+            )
 
         all_review_rows: list[tuple[int, dict[str, Any]]] = []
         for rel_path, rows in parsed_jsonl.items():

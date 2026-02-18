@@ -69,6 +69,8 @@ Long Dashcam Video (5 min+)
 ```bash
 # 1. Install
 pip install -e .
+# Optional: install dashboard UI dependencies
+pip install -e ".[dashboard]"
 
 # 2. Set up environment
 cp .env.example .env
@@ -327,6 +329,83 @@ Measures agreement between quantitative mining signals and Cosmos's natural-lang
 
 Mean grounding score: **90.8%** (15/20 clips fully grounded). Audio's low grounding rate validates that Cosmos reasons from visual evidence, not signal metadata.
 
+## Interactive Dashboard
+
+Streamlit-based interactive dashboard for exploring pipeline results across multiple runs.
+
+Install dashboard dependencies (if not already installed):
+
+```bash
+pip install -e ".[dashboard]"
+```
+
+```bash
+# Launch dashboard
+python -m autorisk.cli dashboard
+
+# Or directly
+streamlit run autorisk/dashboard/app.py
+```
+
+### Dashboard Pages
+
+| Page | Description |
+|------|-------------|
+| **Overview** | KPI cards (accuracy, F1, checklist), severity distribution, detection timeline, architecture diagram |
+| **Clip Explorer** | Per-clip video playback, VLM output, signal radar, TTC timeline, saliency heatmap |
+| **Evaluation** | Confusion matrix, error analysis (over/under estimation), checklist breakdown |
+| **Signal Analysis** | Signal-severity heatmap, Spearman correlations, threshold performance, ablation comparison |
+| **Technical Depth** | TTC box plots, cross-modal grounding radar, calibration reliability diagrams, saliency gallery |
+| **Cross-Run Comparison** | Side-by-side KPIs, severity distributions, confidence, TTC, and grounding across video sources |
+
+The dashboard auto-detects all completed runs in `outputs/` and supports switching between them via the sidebar dropdown.
+
+## Multi-Video Generalization
+
+The pipeline is evaluated across diverse driving conditions to demonstrate generalization:
+
+| Video Source | Location | Conditions | Clips |
+|-------------|----------|------------|-------|
+| UK Urban | England | Daytime, urban | 20 |
+| Japan | Japan | Urban, mixed traffic | 15 |
+| Winter/Snow | Various | Snow, ice, low visibility | 15 |
+| US Highway | North America | Highway, high speed | 15 |
+
+Each video is processed independently with the same pipeline (mining -> Cosmos inference -> supplement -> TTC -> grounding -> report). Cross-run comparison on the dashboard visualizes how severity distributions, confidence, TTC, and grounding scores differ across conditions.
+
+```bash
+# Run all multi-video sources
+python scripts/run_all_inference.py
+
+# Run a single source
+python scripts/run_all_inference.py --only japan
+
+# Generate compact submission metrics JSON across configured sources
+python scripts/generate_submission_metrics.py --out outputs/multi_video/submission_metrics.json
+
+# Validate both artifacts (schema + semantic)
+python -m autorisk.cli multi-validate \
+  --run-summary outputs/multi_video/run_summary.json \
+  --submission-metrics outputs/multi_video/submission_metrics.json \
+  --enforce
+```
+
+## Gradient Saliency Visualization
+
+Gradient-based attention maps showing which video regions influence Cosmos's reasoning:
+
+```bash
+python -m autorisk.cli saliency \
+  --clips-dir outputs/public_run/clips \
+  -r outputs/public_run/cosmos_results.json \
+  -o outputs/public_run
+```
+
+- Computes gradient of max next-token logit w.r.t. video pixel inputs
+- Generates spatial heatmaps (22x40 grid) overlaid on video frames
+- Uses gradient checkpointing to fit within 32GB VRAM (SDPA + checkpointing)
+- Results embedded in HTML report and viewable in dashboard Clip Explorer
+
 ## CLI Commands
 
 ```bash
@@ -359,6 +438,9 @@ python -m autorisk.cli review-apply -r RUN_DIR             # Produce cosmos_resu
 python -m autorisk.cli policy-check -r RUN_DIR --policy configs/policy.yaml --enforce  # Enforce review gating policy
 python -m autorisk.cli finalize-run -r RUN_DIR --zip --audit-grade --sign-private-key keys/private.pem --sign-public-key-dir keys/trusted --handoff-out RUN_DIR/handoff_latest  # Recommended audit-grade handoff (verify+validate+handoff)
 python -m autorisk.cli finalize-run -r RUN_DIR --policy configs/policy.yaml --zip --enforce [--sign-private-key ... --sign-public-key ... --require-signature --require-trusted-key]  # review-apply -> policy-check -> audit-pack -> audit-sign? -> audit-verify
+python -m autorisk.cli multi-run --repo-root . [--only japan] [--dry-run]  # Multi-source unattended runner
+python -m autorisk.cli submission-metrics --repo-root . --out outputs/multi_video/submission_metrics.json  # Compact cross-source metrics JSON
+python -m autorisk.cli multi-validate --run-summary outputs/multi_video/run_summary.json --submission-metrics outputs/multi_video/submission_metrics.json --enforce  # Validate multi-video artifacts (schema+semantic)
 
 # With public config
 python -m autorisk.cli -c configs/public.yaml run -i VIDEO -o OUTPUT_DIR
@@ -403,27 +485,39 @@ python -m autorisk.cli -c configs/public.yaml run -i VIDEO -o OUTPUT_DIR
 - ~17 GB disk for Cosmos-Reason2-8B model weights
 - HuggingFace account with [model access](https://huggingface.co/nvidia/Cosmos-Reason2-8B)
 - FFmpeg 7+ (for clip extraction)
+- Optional dashboard dependencies: `streamlit`, `plotly` (`pip install -e ".[dashboard]"`)
 
 ## Project Structure
 
 ```
 autorisk/
   audit/          # Audit pack builder (manifest/trace/checksums/zip)
-  policy/         # Review-gating policy checks and queue/report generation
-  review/         # Human review logging and reviewed-result generation
-  mining/         # B1: Audio, motion, proximity signal scorers + fusion
   cosmos/         # B2: Local inference client, prompt templates, schemas
-  eval/           # B4/B5: Metrics, checklist, ablation
-  report/         # HTML/Markdown report generation
+  dashboard/      # Streamlit interactive dashboard (6 pages)
+    pages/        # Overview, Explorer, Evaluation, Signals, Depth, Comparison
+  eval/           # B4/B5: Metrics, checklist, ablation, calibration, analysis
+  mining/         # B1: Audio, motion, proximity signal scorers + fusion
+    tracking.py   # TTC estimation (YOLOv8n + ByteTrack + tau approximation)
+  policy/         # Review-gating policy checks and queue/report generation
+  report/         # HTML/Markdown report generation (Jinja2)
+  review/         # Human review logging and reviewed-result generation
+  viz/            # Gradient saliency visualization (attention.py)
   pipeline.py     # E2E orchestration
-  cli.py          # Click CLI (run/mine/infer/eval/ablation/report)
+  cli.py          # Click CLI (30+ commands)
 configs/
   default.yaml    # Default configuration
-  public.yaml     # Public mode (reproducible evaluation)
+  public.yaml     # Public mode (UK dashcam, reproducible)
+  japan.yaml      # Japan urban driving
+  winter.yaml     # Winter/snow conditions
+  us_highway.yaml # US highway driving
 data/
   annotations/    # GT labels (blind-labeled) and checklist scores
+  multi_video/    # Downloaded dashcam videos (5 min clips)
 scripts/
-  download_public_data.py  # Public video downloader (yt-dlp)
+  download_public_data.py     # Public video downloader (yt-dlp)
+  run_all_inference.py        # Multi-video pipeline runner (unattended)
+  run_multi_video.py          # Backward-compatible wrapper around run_all_inference
+  generate_submission_metrics.py  # Cross-source submission metrics generator
 ```
 
 ## License
