@@ -40,4 +40,3 @@ public:
   source_license: "YouTube Standard License"
   max_videos: 1
   max_duration_sec: 300
-

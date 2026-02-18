@@ -28,14 +28,18 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
+          def _normalized_text(path: Path) -> str:
+              # Normalize line-endings so drift check is platform-stable.
+              return "\n".join(path.read_text(encoding="utf-8").splitlines())
+
           schema_src = Path("schemas")
           schema_pkg = Path("autorisk/resources/schemas")
           src_files = sorted(p.name for p in schema_src.glob("*.json"))
           pkg_files = sorted(p.name for p in schema_pkg.glob("*.json"))
           assert src_files == pkg_files, (src_files, pkg_files)
           for name in src_files:
-              left = (schema_src / name).read_bytes()
-              right = (schema_pkg / name).read_bytes()
+              left = _normalized_text(schema_src / name)
+              right = _normalized_text(schema_pkg / name)
               assert left == right, f"schema drift: {name}"
 
           config_pairs = [
@@ -46,7 +50,9 @@ jobs:
               ("configs/retry.yaml", "autorisk/resources/configs/retry.yaml"),
           ]
           for src, pkg in config_pairs:
-              assert Path(src).read_bytes() == Path(pkg).read_bytes(), f"config drift: {src} vs {pkg}"
+              assert _normalized_text(Path(src)) == _normalized_text(Path(pkg)), (
+                  f"config drift: {src} vs {pkg}"
+              )
           PY
 
       - name: Unit Tests (Source Tree)
