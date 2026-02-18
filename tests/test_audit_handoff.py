@@ -126,6 +126,7 @@ def test_build_audit_handoff_creates_single_submission_bundle(sample_run_dir: Pa
     assert res.checksums_path.exists()
     guide_text = res.handoff_guide_path.read_text(encoding="utf-8")
     assert "audit-verify -p PACK.zip --profile audit-grade" in guide_text
+    assert "--expect-pack-fingerprint <TICKET_FP>" in guide_text
     assert "--require-signature" not in guide_text
 
     rows = set(_parse_checksum_rows(res.checksums_path))

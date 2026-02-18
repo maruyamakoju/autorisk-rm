@@ -409,7 +409,9 @@ def test_audit_handoff_verify_profile_default_is_diagnostics_mode(sample_run_dir
         ],
     )
     assert default_res.exit_code == 0, default_res.output
-    assert "diagnostics mode" in default_res.output
+    assert "does not enforce trusted signature/attestation" in default_res.output
+    assert "Do not use for audit-grade acceptance." in default_res.output
+    assert "Use: audit-handoff-verify --profile audit-grade" in default_res.output
 
     audit_res = runner.invoke(
         cli,
@@ -434,6 +436,7 @@ def test_audit_handoff_verify_expect_pack_fingerprint_mismatch(sample_run_dir: P
     assert mismatch != actual
 
     runner = CliRunner()
+    out_json = tmp_path / "handoff_expect_fp.json"
     res = runner.invoke(
         cli,
         [
@@ -444,8 +447,13 @@ def test_audit_handoff_verify_expect_pack_fingerprint_mismatch(sample_run_dir: P
             "audit-grade",
             "--expect-pack-fingerprint",
             mismatch,
+            "--json-out",
+            str(out_json),
             "--enforce",
         ],
     )
     assert res.exit_code == 2
     assert "Expected fingerprint match: False" in res.output
+    payload = json.loads(out_json.read_text(encoding="utf-8"))
+    assert payload["expected_pack_fingerprint"] == mismatch
+    assert payload["expected_pack_fingerprint_match"] is False

@@ -375,6 +375,48 @@ def test_audit_verify_cli_profile_audit_grade_enforces_flags(sample_run_dir: Pat
     assert "Attestation verified: True" in res_ok.output
 
 
+def test_audit_verify_cli_profile_default_prints_diagnostics_warning(sample_run_dir: Path, tmp_path: Path) -> None:
+    _write_finalize_artifacts(sample_run_dir)
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=True,
+    )
+    assert pack_res.zip_path is not None
+
+    private_key, public_key = _write_keypair(tmp_path)
+    sign_audit_pack(
+        pack_res.zip_path,
+        private_key_path=private_key,
+        public_key_path=public_key,
+        include_public_key=True,
+    )
+    attest_audit_pack(
+        pack_res.zip_path,
+        private_key_path=private_key,
+        public_key_path=public_key,
+        include_public_key=True,
+    )
+
+    runner = CliRunner()
+    res = runner.invoke(
+        cli,
+        [
+            "audit-verify",
+            "-p",
+            str(pack_res.zip_path),
+            "--profile",
+            "default",
+            "--strict",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+    assert "crypto requirements are NOT enforced" in res.output
+    assert "Do not use for audit-grade acceptance." in res.output
+    assert "Use: audit-verify --profile audit-grade" in res.output
+
+
 def test_audit_verify_profile_audit_grade_rejects_signature_attestation_key_mismatch(
     sample_run_dir: Path, tmp_path: Path
 ) -> None:
@@ -414,6 +456,7 @@ def test_audit_verify_profile_audit_grade_rejects_signature_attestation_key_mism
     assert default_verify.attestation_verified is True
 
     runner = CliRunner()
+    out_json = tmp_path / "verify_expect_fp.json"
     cli_res = runner.invoke(
         cli,
         [
@@ -460,6 +503,7 @@ def test_audit_verify_expect_pack_fingerprint_mismatch(sample_run_dir: Path, tmp
     assert any(issue.kind == "fingerprint_error" for issue in result.issues)
 
     runner = CliRunner()
+    out_json = tmp_path / "verify_expect_fp.json"
     cli_res = runner.invoke(
         cli,
         [
@@ -472,7 +516,12 @@ def test_audit_verify_expect_pack_fingerprint_mismatch(sample_run_dir: Path, tmp
             str(public_key),
             "--expect-pack-fingerprint",
             mismatch,
+            "--json-out",
+            str(out_json),
         ],
     )
     assert cli_res.exit_code == 2
     assert "Expected fingerprint match: False" in cli_res.output
+    payload = json.loads(out_json.read_text(encoding="utf-8"))
+    assert payload["expected_pack_fingerprint"] == mismatch
+    assert payload["expected_pack_fingerprint_match"] is False

@@ -912,7 +912,11 @@ def audit_verify(
         ))
     elif str(profile).strip().lower() == "default":
         click.echo(
-            "[default] diagnostics mode: crypto requirements are optional unless explicitly requested.",
+            "[default] diagnostics mode: crypto requirements are NOT enforced. Do not use for audit-grade acceptance.",
+            err=True,
+        )
+        click.echo(
+            "Use: audit-verify --profile audit-grade --public-key-dir <TRUSTED_KEYRING> [--expect-pack-fingerprint <TICKET_FP>]",
             err=True,
         )
 
@@ -939,6 +943,7 @@ def audit_verify(
     click.echo(f"Pack root: {result.pack_root}")
     click.echo(f"Checksums: {result.checksums_path}")
     click.echo(f"Checksums SHA256: {result.checksums_sha256}")
+    click.echo(f"Pack fingerprint: {result.checksums_sha256}")
     click.echo(f"Expected files: {result.expected_files}")
     click.echo(f"Verified files: {result.verified_files}")
     click.echo(f"Signature present: {result.signature_present}")
@@ -1184,7 +1189,11 @@ def audit_handoff_verify(
         ))
     elif str(profile).strip().lower() == "default":
         click.echo(
-            "[default] diagnostics mode: handoff verification does not enforce trusted signature/attestation unless explicitly requested.",
+            "[default] diagnostics mode: does not enforce trusted signature/attestation. Do not use for audit-grade acceptance.",
+            err=True,
+        )
+        click.echo(
+            "Use: audit-handoff-verify --profile audit-grade [--expect-pack-fingerprint <TICKET_FP>] --enforce",
             err=True,
         )
 
