@@ -70,6 +70,7 @@ class CosmosLocalClient:
         user_prompt: str,
         video_b64: str = "",
         video_path: str | Path | None = None,
+        temperature_override: float | None = None,
     ) -> str:
         """Run local inference on a video clip.
 
@@ -78,6 +79,7 @@ class CosmosLocalClient:
             user_prompt: User message text.
             video_b64: Unused (for API compatibility).
             video_path: Path to video file.
+            temperature_override: Optional temperature override for this call.
 
         Returns:
             Raw model response text.
@@ -129,13 +131,16 @@ class CosmosLocalClient:
         t1 = time.time()
         timeout_sec = self.cfg.cosmos.local.get("timeout_sec", 1200)
 
+        # Use temperature override if provided
+        temperature = temperature_override if temperature_override is not None else self.temperature
+
         def _generate():
             with torch.inference_mode():
                 return self._model.generate(
                     **inputs,
                     max_new_tokens=self.max_new_tokens,
-                    temperature=self.temperature,
-                    do_sample=self.temperature > 0,
+                    temperature=temperature,
+                    do_sample=temperature > 0,
                 )
 
         with ThreadPoolExecutor(max_workers=1) as pool:

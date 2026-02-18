@@ -162,6 +162,7 @@ class CosmosAPIClient:
         user_prompt: str,
         video_b64: str,
         video_path: str | Path | None = None,
+        temperature_override: float | None = None,
     ) -> str:
         """Send chat completion with video (Cosmos) or image (fallback).
 
@@ -170,6 +171,7 @@ class CosmosAPIClient:
             user_prompt: User message text.
             video_b64: Base64-encoded MP4 (for Cosmos).
             video_path: Path to video file (for fallback frame extraction).
+            temperature_override: Optional temperature override for this call.
 
         Returns:
             Raw model response text.
@@ -193,6 +195,9 @@ class CosmosAPIClient:
                 system_prompt, user_prompt, video_b64,
             )
 
+        # Use temperature override if provided
+        temperature = temperature_override if temperature_override is not None else self.temperature
+
         for attempt in range(1, self.max_retries + 1):
             try:
                 self._request_times.append(time.time())
@@ -201,7 +206,7 @@ class CosmosAPIClient:
                     model=model,
                     messages=messages,
                     max_tokens=self.max_tokens,
-                    temperature=self.temperature,
+                    temperature=temperature,
                     top_p=self.top_p,
                     timeout=self.timeout,
                 )

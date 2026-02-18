@@ -69,8 +69,20 @@ class Pipeline:
 
         # B2: Cosmos inference
         log.info("=== B2: Cosmos Inference ===")
+
+        # Extract voting config
+        voting_cfg = self.cfg.cosmos.get("voting", {})
+        voting_enabled = voting_cfg.get("enabled", False)
+        voting_rounds = voting_cfg.get("rounds", 3) if voting_enabled else 1
+        voting_temperatures = voting_cfg.get("temperatures", [0.3, 0.6, 0.9]) if voting_enabled else None
+
         engine = CosmosInferenceEngine(self.cfg)
-        responses = engine.infer_batch(candidates, output_dir=output_dir)
+        responses = engine.infer_batch(
+            candidates,
+            output_dir=output_dir,
+            voting_rounds=voting_rounds,
+            voting_temperatures=voting_temperatures,
+        )
         engine.save_results(responses, output_dir)
         results["n_responses"] = len(responses)
 

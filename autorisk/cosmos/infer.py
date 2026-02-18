@@ -12,6 +12,8 @@ from tqdm import tqdm
 from autorisk.cosmos.prompt import (
     SYSTEM_PROMPT,
     USER_PROMPT,
+    SYSTEM_PROMPT_V4,
+    USER_PROMPT_V4,
     SUPPLEMENT_SYSTEM_PROMPT,
     SUPPLEMENT_USER_PROMPT,
 )
@@ -339,6 +341,143 @@ class CosmosInferenceEngine:
     def __init__(self, cfg: DictConfig) -> None:
         self.cfg = cfg
         self.client = _create_client(cfg)
+        self.prompt_version = cfg.cosmos.get("prompt_version", "v3")
+
+    def _get_prompts(self) -> tuple[str, str]:
+        """Get system and user prompts based on configured version."""
+        if self.prompt_version == "v4":
+            return SYSTEM_PROMPT_V4, USER_PROMPT_V4
+        else:
+            return SYSTEM_PROMPT, USER_PROMPT
+
+    def infer_single_voting(
+        self,
+        request: CosmosRequest,
+        temperatures: list[float] | None = None,
+    ) -> CosmosResponse:
+        """Run inference with self-consistency voting across multiple temperatures.
+
+        Args:
+            request: Inference request with clip path.
+            temperatures: List of temperatures to use for voting (default: [0.3, 0.6, 0.9]).
+
+        Returns:
+            CosmosResponse with voted severity and averaged confidence.
+        """
+        if temperatures is None:
+            temperatures = [0.3, 0.6, 0.9]
+
+        clip_path = Path(request.clip_path)
+        if not clip_path.exists():
+            return CosmosResponse(
+                request=request,
+                assessment=_fallback_assessment(),
+                parse_success=False,
+                error=f"Clip not found: {clip_path}",
+            )
+
+        system_prompt, user_prompt = self._get_prompts()
+        video_b64 = self.client.encode_video_base64(clip_path)
+
+        responses: list[CosmosResponse] = []
+        for temp in temperatures:
+            try:
+                raw_response = self.client.chat_completion(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    video_b64=video_b64,
+                    video_path=clip_path,
+                    temperature_override=temp,
+                )
+
+                think, answer = _parse_think_answer(raw_response)
+                json_data = _extract_json(answer)
+
+                if json_data is None:
+                    json_data = _extract_json(raw_response)
+
+                if json_data is not None:
+                    assessment = _dict_to_assessment(json_data)
+                    parse_success = True
+                else:
+                    md_data = _parse_markdown_response(raw_response)
+                    if md_data is not None:
+                        assessment = _dict_to_assessment(md_data)
+                        parse_success = True
+                    else:
+                        assessment = _fallback_assessment()
+                        assessment.causal_reasoning = answer[:500] if answer else raw_response[:500]
+                        parse_success = False
+
+                responses.append(CosmosResponse(
+                    request=request,
+                    assessment=assessment,
+                    raw_thinking=think,
+                    raw_answer=answer,
+                    parse_success=parse_success,
+                ))
+
+                log.info(
+                    "Vote T=%.1f: severity=%s, conf=%.2f, parse=%s",
+                    temp, assessment.severity, assessment.confidence, parse_success,
+                )
+
+            except Exception as e:
+                log.error("Voting round failed at T=%.1f: %s", temp, e)
+                responses.append(CosmosResponse(
+                    request=request,
+                    assessment=_fallback_assessment(),
+                    parse_success=False,
+                    error=str(e),
+                ))
+
+        # Majority vote on severity
+        from collections import Counter
+        severities = [r.assessment.severity for r in responses if r.parse_success]
+        if not severities:
+            return CosmosResponse(
+                request=request,
+                assessment=_fallback_assessment(),
+                parse_success=False,
+                error="All voting rounds failed",
+            )
+
+        vote_counts = Counter(severities)
+        winning_severity = vote_counts.most_common(1)[0][0]
+
+        # Find best response with winning severity (highest confidence)
+        winning_responses = [
+            r for r in responses
+            if r.parse_success and r.assessment.severity == winning_severity
+        ]
+        best_response = max(winning_responses, key=lambda r: r.assessment.confidence)
+
+        # Average confidence across all successful rounds
+        confidences = [r.assessment.confidence for r in responses if r.parse_success]
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+
+        # Build vote metadata
+        vote_meta = {
+            "temperatures": temperatures,
+            "votes": [
+                {"temp": temperatures[i], "severity": r.assessment.severity, "conf": r.assessment.confidence}
+                for i, r in enumerate(responses) if r.parse_success
+            ],
+            "winning_severity": winning_severity,
+            "vote_distribution": dict(vote_counts),
+        }
+
+        # Use best response's assessment but with averaged confidence
+        final_assessment = best_response.assessment
+        final_assessment.confidence = avg_confidence
+
+        return CosmosResponse(
+            request=request,
+            assessment=final_assessment,
+            raw_thinking=f"VOTING METADATA: {vote_meta}\n\n{best_response.raw_thinking}",
+            raw_answer=best_response.raw_answer,
+            parse_success=True,
+        )
 
     def infer_single(self, request: CosmosRequest) -> CosmosResponse:
         """Run inference on a single clip.
@@ -358,12 +497,12 @@ class CosmosInferenceEngine:
                 error=f"Clip not found: {clip_path}",
             )
 
-        user_prompt = USER_PROMPT
+        system_prompt, user_prompt = self._get_prompts()
 
         try:
             video_b64 = self.client.encode_video_base64(clip_path)
             raw_response = self.client.chat_completion(
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 video_b64=video_b64,
                 video_path=clip_path,
@@ -430,6 +569,8 @@ class CosmosInferenceEngine:
         self,
         candidates: list[Candidate],
         output_dir: Path | None = None,
+        voting_rounds: int = 1,
+        voting_temperatures: list[float] | None = None,
     ) -> list[CosmosResponse]:
         """Run inference on a batch of candidates.
 
@@ -439,6 +580,8 @@ class CosmosInferenceEngine:
         Args:
             candidates: List of mining candidates with clip paths.
             output_dir: Optional dir for incremental saving after each clip.
+            voting_rounds: Number of voting rounds (1 = no voting, 3+ = self-consistency).
+            voting_temperatures: Temperatures for voting rounds (default: [0.3, 0.6, 0.9]).
 
         Returns:
             List of CosmosResponse objects.
@@ -466,7 +609,13 @@ class CosmosInferenceEngine:
                 peak_time_sec=cand.peak_time_sec,
                 fused_score=cand.fused_score,
             )
-            response = self.infer_single(request)
+
+            # Use voting if enabled (voting_rounds > 1)
+            if voting_rounds > 1:
+                response = self.infer_single_voting(request, temperatures=voting_temperatures)
+            else:
+                response = self.infer_single(request)
+
             responses.append(response)
 
             log.info(
