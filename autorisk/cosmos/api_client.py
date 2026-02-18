@@ -6,11 +6,19 @@ import base64
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
 from omegaconf import DictConfig
-from openai import OpenAI
+
+try:
+    from openai import OpenAI
+except Exception as exc:  # pragma: no cover - optional runtime dependency
+    OpenAI = Any  # type: ignore[assignment]
+    _OPENAI_IMPORT_ERROR: Exception | None = exc
+else:
+    _OPENAI_IMPORT_ERROR = None
 
 from autorisk.utils.logger import setup_logger
 
@@ -51,6 +59,11 @@ class CosmosAPIClient:
         self._use_frames: bool = False
 
     def _get_client(self) -> OpenAI:
+        if _OPENAI_IMPORT_ERROR is not None:
+            raise RuntimeError(
+                "openai package is required for Cosmos API backend. "
+                "Install dependency: pip install openai"
+            ) from _OPENAI_IMPORT_ERROR
         if self._client is None:
             self._client = OpenAI(
                 base_url=self.base_url,
