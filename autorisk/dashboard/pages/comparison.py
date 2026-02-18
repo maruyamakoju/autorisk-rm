@@ -8,8 +8,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from autorisk.dashboard.comparison_utils import (
-    SIGNAL_NAMES,
+    SEVERITY_COLORS,
     SEVERITY_ORDER,
+    SIGNAL_NAMES,
     compute_run_kpis,
     confidence_values,
     discover_runs,
@@ -43,6 +44,12 @@ def render(data: dict) -> None:  # noqa: ARG001
         return
 
     st.caption(f"Comparing {len(runs)} pipeline runs across different video sources")
+
+    # --- Run Summary Cards ---
+    st.subheader("Run Summaries")
+    _render_run_summary_cards(runs)
+
+    st.divider()
 
     # --- KPI Comparison Table ---
     st.subheader("Performance Comparison")
@@ -210,3 +217,45 @@ def render(data: dict) -> None:  # noqa: ARG001
             showlegend=False,
         )
         st.plotly_chart(fig5, width="stretch")
+
+
+def _render_run_summary_cards(runs: dict) -> None:
+    """Render summary cards with headline stats for each run."""
+    cols = st.columns(len(runs))
+    for i, (label, rdata) in enumerate(runs.items()):
+        with cols[i]:
+            cosmos = rdata.get("cosmos_results", [])
+            cosmos_list = cosmos if isinstance(cosmos, list) else []
+            kpis = compute_run_kpis(rdata)
+
+            # Count severity distribution
+            counts = severity_counts(cosmos_list)
+            n_clips = int(kpis["clips"])
+            parse_rate = (int(kpis["parse_ok"]) / n_clips * 100) if n_clips > 0 else 0
+
+            # Build colored severity bars
+            sev_bars = ""
+            for sev in SEVERITY_ORDER:
+                count = counts[sev]
+                if count > 0:
+                    color = SEVERITY_COLORS.get(sev, "#6B7280")
+                    sev_bars += f'<div style="background:{color}; color:white; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; margin-right:4px;">{sev}: {count}</div>'
+
+            html = f"""
+            <div style="background:linear-gradient(135deg, #1E1E2E 0%, #2D2D44 100%);
+                        border:1px solid rgba(124, 58, 237, 0.15);
+                        border-radius:10px;
+                        padding:14px;">
+                <div style="font-size:16px; font-weight:700; margin-bottom:8px; color:#A78BFA;">{label}</div>
+                <div style="font-size:13px; color:#9CA3AF; margin-bottom:6px;">
+                    <strong>{n_clips}</strong> clips analyzed
+                </div>
+                <div style="font-size:13px; color:#9CA3AF; margin-bottom:8px;">
+                    Parse: <strong>{parse_rate:.0f}%</strong>
+                </div>
+                <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                    {sev_bars}
+                </div>
+            </div>
+            """
+            st.markdown(html, unsafe_allow_html=True)

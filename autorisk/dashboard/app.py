@@ -11,7 +11,7 @@ from pathlib import Path
 import streamlit as st
 
 from autorisk.dashboard.data_loader import load_data
-from autorisk.dashboard.pages import comparison, depth, evaluation, explorer, overview, signals
+from autorisk.dashboard.pages import comparison, depth, evaluation, explorer, overview, search, signals
 
 # --- Page Config ---
 st.set_page_config(
@@ -99,7 +99,15 @@ with st.sidebar:
     # Navigation
     page = st.radio(
         "Navigation",
-        ["Overview", "Clip Explorer", "Evaluation", "Signal Analysis", "Technical Depth", "Cross-Run Comparison"],
+        [
+            "Overview",
+            "Clip Explorer",
+            "Search",
+            "Evaluation",
+            "Signal Analysis",
+            "Technical Depth",
+            "Cross-Run Comparison",
+        ],
         index=0,
         label_visibility="collapsed",
     )
@@ -139,6 +147,8 @@ if page == "Overview":
     overview.render(data)
 elif page == "Clip Explorer":
     explorer.render(data)
+elif page == "Search":
+    search.render(data)
 elif page == "Evaluation":
     evaluation.render(data)
 elif page == "Signal Analysis":

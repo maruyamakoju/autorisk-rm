@@ -8,7 +8,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 import streamlit as st
 
-from autorisk.dashboard.data_loader import SEVERITY_COLORS, SEVERITY_ORDER
+from autorisk.dashboard.comparison_utils import SEVERITY_COLORS, SEVERITY_ORDER
 
 
 def _severity_badge_html(severity: str) -> str:
@@ -32,6 +32,7 @@ def render(data: dict) -> None:
     ttc_lookup = data["ttc_lookup"]
     grounding_lookup = data["grounding_lookup"]
     saliency_images = data["saliency_images"]
+    saliency_results = data["saliency_results"]
     clips_dir = Path(data["clips_dir"])
 
     if not cosmos:
@@ -89,6 +90,68 @@ def render(data: dict) -> None:
                     heat_bytes = base64.b64decode(sal_data["heatmap_b64"])
                     st.image(heat_bytes, caption="Attention Heatmap", width="stretch")
 
+        # Temporal saliency bar (attention over time)
+        sal_result = next(
+            (
+                s
+                for s in saliency_results
+                if isinstance(s, dict) and str(s.get("clip_name", "")) == clip_name
+            ),
+            None,
+        )
+        if sal_result and sal_result.get("frame_saliency_sums"):
+            st.markdown("**Temporal Attention**")
+            frame_scores = []
+            for raw in sal_result["frame_saliency_sums"]:
+                try:
+                    frame_scores.append(float(raw))
+                except Exception:
+                    frame_scores.append(0.0)
+            n_frames = len(frame_scores)
+
+            # Normalize scores to 0-1 range for coloring
+            max_score = max(frame_scores) if frame_scores else 1
+            normalized = [s / max_score for s in frame_scores]
+
+            # Create color gradient: blue (low) -> yellow -> red (high)
+            colors = []
+            for norm_val in normalized:
+                if norm_val < 0.5:
+                    # blue -> yellow
+                    r = int(norm_val * 2 * 255)
+                    g = int(norm_val * 2 * 255)
+                    b = int((1 - norm_val * 2) * 255)
+                else:
+                    # yellow -> red
+                    r = 255
+                    g = int((2 - norm_val * 2) * 255)
+                    b = 0
+                colors.append(f"rgb({r},{g},{b})")
+
+            # Time labels (assuming ~10s clip divided into N frames)
+            clip_duration = 10.0  # seconds (typical clip duration)
+            frame_times = [f"{i * clip_duration / n_frames:.1f}s" for i in range(n_frames)]
+
+            fig = go.Figure(data=[
+                go.Bar(
+                    x=frame_times,
+                    y=frame_scores,
+                    marker=dict(color=colors, line=dict(width=0)),
+                    hovertemplate="Time: %{x}<br>Attention: %{y:.2f}<extra></extra>",
+                )
+            ])
+            fig.update_layout(
+                height=180,
+                margin=dict(l=10, r=10, t=10, b=40),
+                xaxis_title="Time in Clip",
+                yaxis_title="Attention",
+                showlegend=False,
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
     with col_info:
         # Severity badges
         st.markdown(
@@ -99,6 +162,11 @@ def render(data: dict) -> None:
         conf = result.get("confidence", 0)
         score = result.get("fused_score", 0)
         st.markdown(f"**Fused Score:** `{score:.3f}` &nbsp;&nbsp; **Confidence:** `{conf:.2f}`")
+
+        # Voting badge (if metadata exists)
+        vote_dist = result.get("vote_distribution")
+        if vote_dist and isinstance(vote_dist, dict):
+            _render_vote_badge(vote_dist)
 
         st.markdown("---")
 
@@ -244,3 +312,32 @@ def render(data: dict) -> None:
                         )
         else:
             st.caption("No TTC data available for this clip.")
+
+
+def _render_vote_badge(vote_dist: dict) -> None:
+    """Render a vote distribution badge if voting metadata is present."""
+    cleaned_votes: dict[str, float] = {}
+    for sev in SEVERITY_ORDER:
+        try:
+            cleaned_votes[sev] = float(vote_dist.get(sev, 0) or 0)
+        except Exception:
+            cleaned_votes[sev] = 0.0
+
+    total_votes = sum(cleaned_votes.values())
+    if total_votes == 0:
+        return
+
+    # Build vote bars
+    vote_html = '<div style="margin-top:8px;"><strong>Vote Distribution:</strong><div style="display:flex; gap:4px; margin-top:4px;">'
+    for sev in SEVERITY_ORDER:
+        count = cleaned_votes.get(sev, 0)
+        if count > 0:
+            pct = (count / total_votes) * 100
+            color = SEVERITY_COLORS.get(sev, "#6B7280")
+            vote_html += (
+                f'<div style="background:{color}; color:white; padding:4px 8px; border-radius:4px; '
+                f'font-size:11px; font-weight:700;">{sev}: {int(round(count))} ({pct:.0f}%)</div>'
+            )
+    vote_html += '</div></div>'
+
+    st.markdown(vote_html, unsafe_allow_html=True)

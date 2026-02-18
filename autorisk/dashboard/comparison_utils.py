@@ -14,6 +14,14 @@ RUN_LABELS: dict[str, str] = {
 SEVERITY_ORDER: tuple[str, str, str, str] = ("NONE", "LOW", "MEDIUM", "HIGH")
 SIGNAL_NAMES: tuple[str, str, str] = ("audio", "motion", "proximity")
 
+# Centralized severity color scheme (used across all dashboard pages)
+SEVERITY_COLORS: dict[str, str] = {
+    "NONE": "#6B7280",    # gray
+    "LOW": "#10B981",     # green
+    "MEDIUM": "#F59E0B",  # orange/yellow
+    "HIGH": "#EF4444",    # red
+}
+
 
 def discover_runs(
     *,

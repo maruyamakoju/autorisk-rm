@@ -21,14 +21,19 @@ except Exception:  # pragma: no cover - optional dependency fallback
 
     st = _StreamlitFallback()  # type: ignore[assignment]
 
-SEVERITY_ORDER = ["NONE", "LOW", "MEDIUM", "HIGH"]
-
-SEVERITY_COLORS = {
-    "NONE": "#6B7280",
-    "LOW": "#10B981",
-    "MEDIUM": "#F59E0B",
-    "HIGH": "#EF4444",
-}
+# Import centralized constants from comparison_utils
+# Note: This must come after streamlit import attempt
+try:
+    from autorisk.dashboard.comparison_utils import SEVERITY_COLORS, SEVERITY_ORDER
+except ImportError:
+    # Fallback if comparison_utils not available
+    SEVERITY_ORDER = ["NONE", "LOW", "MEDIUM", "HIGH"]
+    SEVERITY_COLORS = {
+        "NONE": "#6B7280",
+        "LOW": "#10B981",
+        "MEDIUM": "#F59E0B",
+        "HIGH": "#EF4444",
+    }
 
 SEVERITY_EMOJI = {
     "NONE": "",

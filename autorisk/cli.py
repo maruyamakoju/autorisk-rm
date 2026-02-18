@@ -494,6 +494,32 @@ def report(
     click.echo(f"Report generated: {report_path}")
 
 
+@cli.command("narrative")
+@click.option("--results", "-r", required=True, help="Path to cosmos_results.json")
+@click.option("--out", "-o", "output_path", default=None, help="Output markdown file path")
+@click.pass_context
+def narrative(
+    ctx: click.Context,
+    results: str,
+    output_path: str | None,
+) -> None:
+    """Generate human-readable safety narrative from cosmos results."""
+    from autorisk.report.safety_narrative import generate_from_json
+
+    results_path = Path(results)
+    if not results_path.exists():
+        click.echo(f"Error: Results file not found: {results}", err=True)
+        raise SystemExit(1)
+
+    if output_path is None:
+        output_path = results_path.parent / "safety_narrative.md"
+    else:
+        output_path = Path(output_path)
+
+    saved_path = generate_from_json(results_path, output_path)
+    click.echo(f"Safety narrative generated: {saved_path}")
+
+
 @cli.command()
 @click.option("--results", "-r", required=True, help="Path to cosmos_results.json")
 @click.option("--gt", "-g", default=None, help="Path to GT labels CSV")
