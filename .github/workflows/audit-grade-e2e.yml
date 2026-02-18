@@ -42,6 +42,7 @@ jobs:
               ("configs/policy.yaml", "autorisk/resources/configs/policy.yaml"),
               ("configs/default.yaml", "autorisk/resources/configs/default.yaml"),
               ("configs/public.yaml", "autorisk/resources/configs/public.yaml"),
+              ("configs/public_v4.yaml", "autorisk/resources/configs/public_v4.yaml"),
               ("configs/retry.yaml", "autorisk/resources/configs/retry.yaml"),
           ]
           for src, pkg in config_pairs:
@@ -189,12 +190,12 @@ jobs:
           cd "$WORKDIR"
           python - <<'PY'
           from autorisk.dashboard.data_loader import load_data
-          from autorisk.dashboard.pages import comparison, depth, evaluation, explorer, overview, signals
+          from autorisk.dashboard.pages import comparison, depth, evaluation, explorer, overview, search, signals
 
           data = load_data("outputs/ci_audit_run")
           assert isinstance(data, dict)
           assert isinstance(data.get("cosmos_results"), list)
-          for page in [overview, explorer, evaluation, signals, depth, comparison]:
+          for page in [overview, explorer, search, evaluation, signals, depth, comparison]:
               assert callable(page.render)
           print("Dashboard smoke passed.")
           PY
@@ -411,11 +412,11 @@ jobs:
           python -m autorisk.cli policy-check -r outputs/sdist_run
           python - <<'PY'
           from autorisk.dashboard.data_loader import load_data
-          from autorisk.dashboard.pages import comparison, depth, evaluation, explorer, overview, signals
+          from autorisk.dashboard.pages import comparison, depth, evaluation, explorer, overview, search, signals
 
           data = load_data("outputs/sdist_run")
           assert isinstance(data, dict)
-          for page in [overview, explorer, evaluation, signals, depth, comparison]:
+          for page in [overview, explorer, search, evaluation, signals, depth, comparison]:
               assert callable(page.render)
           print("Dashboard smoke (sdist) passed.")
           PY
