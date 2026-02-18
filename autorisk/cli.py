@@ -76,6 +76,16 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _format_effective_flags(flags: dict[str, object]) -> str:
+    parts: list[str] = []
+    for key, value in flags.items():
+        if isinstance(value, bool):
+            parts.append(f"{key}={'true' if value else 'false'}")
+        else:
+            parts.append(f"{key}={value}")
+    return " ".join(parts)
+
+
 def _autorisk_version() -> str:
     try:
         return str(importlib.metadata.version("autorisk-rm"))
@@ -841,7 +851,7 @@ def audit_attest(
     type=click.Choice(["default", "audit-grade"], case_sensitive=False),
     default="default",
     show_default=True,
-    help="Verification profile (audit-grade enforces strict trusted signature + attestation checks)",
+    help="Verification profile (default=diagnostics, audit-grade=enforced trusted signature + attestation)",
 )
 @click.option("--strict/--no-strict", default=True, show_default=True, help="Strict verification (fail on any issue)")
 @click.option("--public-key", default=None, help="Optional Ed25519 public key PEM path for signature verification")
@@ -862,6 +872,7 @@ def audit_attest(
 )
 @click.option("--revoked-key-id", "revoked_key_ids", multiple=True, help="Revoked signature key_id (repeatable)")
 @click.option("--revocation-file", default=None, help="Path to revoked key IDs file (one key_id per line)")
+@click.option("--expect-pack-fingerprint", default=None, help="Expected checksums.sha256.txt SHA256 (64 hex) for anti-substitution checks")
 @click.option("--json-out", default=None, help="Optional path to write verification result JSON")
 def audit_verify(
     pack: str,
@@ -875,6 +886,7 @@ def audit_verify(
     trust_embedded_public_key: bool,
     revoked_key_ids: tuple[str, ...],
     revocation_file: str | None,
+    expect_pack_fingerprint: str | None,
     json_out: str | None,
 ) -> None:
     """Verify an audit pack using checksums.sha256.txt."""
@@ -888,10 +900,20 @@ def audit_verify(
         require_attestation = True
         trust_embedded_public_key = False
         require_attestation_key_match_signature = True
+        click.echo("[audit-grade] " + _format_effective_flags(
+            {
+                "strict": strict,
+                "require_signature": require_signature,
+                "require_public_key": require_public_key,
+                "require_attestation": require_attestation,
+                "trust_embedded_public_key": trust_embedded_public_key,
+                "require_attestation_key_match_signature": require_attestation_key_match_signature,
+            }
+        ))
+    elif str(profile).strip().lower() == "default":
         click.echo(
-            "[audit-grade] strict=true require_signature=true require_public_key=true "
-            "require_attestation=true trust_embedded_public_key=false "
-            "require_attestation_key_match_signature=true"
+            "[default] diagnostics mode: crypto requirements are optional unless explicitly requested.",
+            err=True,
         )
 
     revoked = _load_revoked_key_ids(
@@ -907,6 +929,7 @@ def audit_verify(
         require_public_key=require_public_key,
         require_attestation=require_attestation,
         require_attestation_key_match_signature=require_attestation_key_match_signature,
+        expect_pack_fingerprint=expect_pack_fingerprint,
         trust_embedded_public_key=trust_embedded_public_key,
         revoked_key_ids=revoked,
     )
@@ -930,6 +953,9 @@ def audit_verify(
         click.echo(f"Attestation key id: {result.attestation_key_id}")
         click.echo(f"Attestation key source: {result.attestation_key_source or 'none'}")
     click.echo(f"Attestation verified: {result.attestation_verified}")
+    if result.expected_pack_fingerprint != "":
+        click.echo(f"Expected fingerprint: {result.expected_pack_fingerprint}")
+        click.echo(f"Expected fingerprint match: {result.expected_pack_fingerprint_match}")
     unchecked_files = list(result.unchecked_files or [])
     click.echo(f"Unchecked files: {len(unchecked_files)}")
     for rel in unchecked_files[:20]:
@@ -1100,7 +1126,7 @@ def audit_handoff(
     type=click.Choice(["default", "audit-grade"], case_sensitive=False),
     default="audit-grade",
     show_default=True,
-    help="Verification profile (audit-grade enforces strict trusted signature + attestation checks)",
+    help="Verification profile (default=diagnostics, audit-grade=enforced trusted signature + attestation)",
 )
 @click.option("--strict/--no-strict", default=True, show_default=True, help="Strict checksum verification for bundled PACK.zip")
 @click.option("--require-signature/--no-require-signature", default=True, show_default=True, help="Require signature.json in bundled PACK.zip")
@@ -1124,6 +1150,7 @@ def audit_handoff(
     show_default=True,
     help="Compare bundled audit_validate_report.json with recomputed validation result",
 )
+@click.option("--expect-pack-fingerprint", default=None, help="Expected PACK fingerprint (checksums.sha256.txt SHA256, 64 hex)")
 @click.option("--enforce/--no-enforce", default=True, show_default=True, help="Exit non-zero when any issue is found")
 @click.option("--json-out", default=None, help="Optional path to write handoff verification result JSON")
 def audit_handoff_verify(
@@ -1135,6 +1162,7 @@ def audit_handoff_verify(
     require_attestation: bool,
     validate_profile: str,
     compare_bundled_validate_report: bool,
+    expect_pack_fingerprint: str | None,
     enforce: bool,
     json_out: str | None,
 ) -> None:
@@ -1142,11 +1170,22 @@ def audit_handoff_verify(
     from autorisk.audit.handoff_verify import verify_audit_handoff
 
     if str(profile).strip().lower() == "audit-grade":
+        click.echo("[audit-grade] " + _format_effective_flags(
+            {
+                "strict": True,
+                "require_signature": True,
+                "require_public_key": True,
+                "require_attestation": True,
+                "validate_profile": "audit-grade",
+                "compare_bundled_validate_report": True,
+                "trust_embedded_public_key": False,
+                "require_attestation_key_match_signature": True,
+            }
+        ))
+    elif str(profile).strip().lower() == "default":
         click.echo(
-            "[audit-grade] strict=true require_signature=true require_public_key=true "
-            "require_attestation=true validate_profile=audit-grade "
-            "compare_bundled_validate_report=true trust_embedded_public_key=false "
-            "require_attestation_key_match_signature=true"
+            "[default] diagnostics mode: handoff verification does not enforce trusted signature/attestation unless explicitly requested.",
+            err=True,
         )
 
     result = verify_audit_handoff(
@@ -1158,6 +1197,7 @@ def audit_handoff_verify(
         require_attestation=require_attestation,
         validate_profile=validate_profile,
         compare_bundled_validate_report=compare_bundled_validate_report,
+        expect_pack_fingerprint=expect_pack_fingerprint,
     )
 
     click.echo(f"Handoff dir: {result.handoff_dir}")
@@ -1176,6 +1216,11 @@ def audit_handoff_verify(
     if result.attestation_present:
         click.echo(f"Attestation key id: {result.attestation_key_id}")
         click.echo(f"Attestation key source: {result.attestation_key_source or 'none'}")
+    if result.pack_fingerprint != "":
+        click.echo(f"Pack fingerprint: {result.pack_fingerprint}")
+    if result.expected_pack_fingerprint != "":
+        click.echo(f"Expected fingerprint: {result.expected_pack_fingerprint}")
+        click.echo(f"Expected fingerprint match: {result.expected_pack_fingerprint_match}")
     if result.bundled_validate_report_match is not None:
         click.echo(f"validate report match: {result.bundled_validate_report_match}")
     click.echo(f"Issues: {len(result.issues)}")
@@ -1730,6 +1775,23 @@ def finalize_run(
         click.echo(f"[4.7/4] audit-handoff: {handoff_res.output_dir}")
 
     click.echo(f"[4.8/4] finalize-record: {finalize_record_path}")
+
+@cli.command()
+@click.option("--run-dir", "-r", default=None, help="Run output directory")
+@click.option("--port", "-p", default=8501, help="Streamlit server port")
+def dashboard(run_dir: str | None, port: int) -> None:
+    """Launch interactive Streamlit dashboard."""
+    import subprocess
+
+    app_path = Path(__file__).parent / "dashboard" / "app.py"
+    if not app_path.exists():
+        click.echo(f"Error: dashboard app not found at {app_path}", err=True)
+        raise SystemExit(1)
+
+    cmd = ["streamlit", "run", str(app_path), "--server.port", str(port)]
+    click.echo(f"Launching dashboard at http://localhost:{port}")
+    subprocess.run(cmd, check=False)
+
 
 if __name__ == "__main__":
     cli()
