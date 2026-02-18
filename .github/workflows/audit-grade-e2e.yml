@@ -75,7 +75,8 @@ jobs:
 
       - name: Prepare External Workdir
         run: |
-          echo "WORKDIR=$(mktemp -d)" >> "$GITHUB_ENV"
+          WORKDIR="$(mktemp -d)"
+          echo "WORKDIR=$WORKDIR" >> "$GITHUB_ENV"
           mkdir -p "$WORKDIR"
 
       - name: Wheel Multi-Validate Smoke (Outside Repo)
