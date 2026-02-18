@@ -349,11 +349,11 @@ python -m autorisk.cli saliency -d CLIPS_DIR -r RESULTS.json -o DIR  # Gradient 
 python -m autorisk.cli audit-pack -r RUN_DIR               # Auditable evidence pack (manifest/trace/checksums)
 python -m autorisk.cli audit-sign -p PACK_OR_ZIP --private-key keys/private.pem [--private-key-password-env AUTORISK_SIGNING_KEY_PASSWORD] [--public-key keys/public.pem] [--key-label ops-2026q1]  # Sign audit pack (Ed25519)
 python -m autorisk.cli audit-attest -p PACK_OR_ZIP --private-key keys/private.pem [--private-key-password-env AUTORISK_SIGNING_KEY_PASSWORD] [--public-key keys/public.pem] [--key-label ops-2026q1]  # Attest non-checksummed finalize/validate artifacts
-python -m autorisk.cli audit-verify -p PACK_OR_ZIP [--public-key keys/public.pem | --public-key-dir keys/trusted] [--profile audit-grade] [--require-signature --require-public-key --require-attestation] [--revocation-file revoked_key_ids.txt]  # Verify integrity + authenticity
+python -m autorisk.cli audit-verify -p PACK_OR_ZIP [--public-key keys/public.pem | --public-key-dir keys/trusted] [--profile audit-grade] [--expect-pack-fingerprint <64hex>] [--require-signature --require-public-key --require-attestation] [--revocation-file revoked_key_ids.txt]  # Verify integrity + authenticity
 python -m autorisk.cli audit-validate -p PACK_OR_ZIP --enforce   # Validate audit contract (schema + semantic checks)
 python -m autorisk.cli audit-verifier-bundle --out verifier_bundle --public-key-dir keys/trusted [--revocation-file revoked_key_ids.txt]  # Build portable verifier bundle
 python -m autorisk.cli audit-handoff -r RUN_DIR --out handoff    # Build single handoff folder (PACK + verifier bundle + finalize record)
-python -m autorisk.cli audit-handoff-verify -d HANDOFF_DIR --profile audit-grade --enforce  # Verify handoff in one command (checksums + verify + validate + attestation)
+python -m autorisk.cli audit-handoff-verify -d HANDOFF_DIR --profile audit-grade [--expect-pack-fingerprint <64hex>] --enforce  # Verify handoff in one command (checksums + verify + validate + attestation)
 python -m autorisk.cli review-approve -r RUN_DIR --rank N --severity MEDIUM --reason "..."  # Append human decision
 python -m autorisk.cli review-apply -r RUN_DIR             # Produce cosmos_results_reviewed.json
 python -m autorisk.cli policy-check -r RUN_DIR --policy configs/policy.yaml --enforce  # Enforce review gating policy
@@ -381,6 +381,8 @@ python -m autorisk.cli -c configs/public.yaml run -i VIDEO -o OUTPUT_DIR
 - `audit-verify` prints `Unchecked files` (e.g., `run_artifacts/finalize_record.json`, `run_artifacts/audit_validate_report.json`) so non-checksummed payload is explicit during audit review
 - `audit-handoff-verify` validates `attestation.json` by default (`--require-attestation`) and checks it against PACK fingerprint + run artifacts hashes
 - For PACK-only receipt (without handoff folder), use `audit-verify --profile audit-grade` (or `--require-attestation`) to verify signature + attestation in one command
+- `--expect-pack-fingerprint <64hex>` is supported by both `audit-verify` and `audit-handoff-verify` to prevent PACK substitution (compare against ticket/DB recorded fingerprint)
+- `--profile default` is diagnostics-only: crypto requirements are not enforced and results must not be used for audit-grade acceptance
 - Legacy bundles without `attestation.json` can be inspected with `--no-require-attestation` for diagnostics only (not valid for audit-grade decisions)
 - `audit-validate` supports `--profile audit-grade` to require signature/finalize/policy/review artifacts in addition to schema + semantic checks
 - `finalize-run --audit-grade` now includes `audit-validate` and handoff generation in one command (`--write-handoff` defaults to ON in audit-grade mode)

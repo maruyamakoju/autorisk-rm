@@ -260,6 +260,7 @@ jobs:
           test -f outputs/ci_audit_run/handoff_latest/HANDOFF.md
           test -f outputs/ci_audit_run/handoff_latest/handoff_checksums.sha256.txt
           python -m autorisk.cli audit-handoff-verify -d outputs/ci_audit_run/handoff_latest \
+            --profile audit-grade \
             --enforce \
             --json-out artifacts/handoff_verify.json
 

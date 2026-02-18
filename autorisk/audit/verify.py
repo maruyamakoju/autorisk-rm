@@ -39,7 +39,7 @@ _OPTIONAL_UNCHECKSUMED_FILES = {
 
 @dataclass
 class VerifyIssue:
-    kind: str  # mismatch | missing_file | unexpected_file | parse_error | io_error | signature_error | attestation_error
+    kind: str  # mismatch | missing_file | unexpected_file | parse_error | io_error | signature_error | attestation_error | fingerprint_error
     path: str
     expected_sha256: str | None = None
     actual_sha256: str | None = None
@@ -66,6 +66,8 @@ class AuditVerifyResult:
     attestation_verified: bool | None = None
     attestation_key_id: str = ""
     attestation_key_source: str = ""
+    expected_pack_fingerprint: str = ""
+    expected_pack_fingerprint_match: bool | None = None
     unchecked_files: list[str] | None = None
 
     @property
@@ -92,6 +94,8 @@ class AuditVerifyResult:
             "attestation_verified": self.attestation_verified,
             "attestation_key_id": self.attestation_key_id,
             "attestation_key_source": self.attestation_key_source,
+            "expected_pack_fingerprint": self.expected_pack_fingerprint,
+            "expected_pack_fingerprint_match": self.expected_pack_fingerprint_match,
             "unchecked_files": list(self.unchecked_files or []),
             "issues": [asdict(i) for i in self.issues],
         }
@@ -427,6 +431,7 @@ def _verify_dir(
     require_public_key: bool = False,
     require_attestation: bool = False,
     require_attestation_key_match_signature: bool = False,
+    expect_pack_fingerprint: str | None = None,
     trust_embedded_public_key: bool = False,
     revoked_key_ids: set[str] | None = None,
 ) -> AuditVerifyResult:
@@ -582,6 +587,31 @@ def _verify_dir(
         issues=issues,
     )
 
+    expected_pack_fingerprint = str(expect_pack_fingerprint or "").strip().lower()
+    expected_pack_fingerprint_match: bool | None = None
+    if expected_pack_fingerprint != "":
+        if not _HEX64.match(expected_pack_fingerprint):
+            expected_pack_fingerprint_match = False
+            issues.append(
+                VerifyIssue(
+                    kind="fingerprint_error",
+                    path=str(checksums_path),
+                    detail=f"invalid expected fingerprint format: {expect_pack_fingerprint}",
+                )
+            )
+        else:
+            expected_pack_fingerprint_match = checksums_sha256.lower() == expected_pack_fingerprint
+            if not expected_pack_fingerprint_match:
+                issues.append(
+                    VerifyIssue(
+                        kind="fingerprint_error",
+                        path=str(checksums_path),
+                        detail="pack fingerprint does not match expected value",
+                        expected_sha256=expected_pack_fingerprint,
+                        actual_sha256=checksums_sha256,
+                    )
+                )
+
     if not strict:
         issues = [i for i in issues if i.kind != "unexpected_file"]
 
@@ -604,6 +634,8 @@ def _verify_dir(
         attestation_verified=attestation_verified,
         attestation_key_id=attestation_key_id,
         attestation_key_source=attestation_key_source,
+        expected_pack_fingerprint=expected_pack_fingerprint,
+        expected_pack_fingerprint_match=expected_pack_fingerprint_match,
         unchecked_files=sorted(unchecked_files),
     )
 
@@ -618,6 +650,7 @@ def _verify_zip(
     require_public_key: bool = False,
     require_attestation: bool = False,
     require_attestation_key_match_signature: bool = False,
+    expect_pack_fingerprint: str | None = None,
     trust_embedded_public_key: bool = False,
     revoked_key_ids: set[str] | None = None,
 ) -> AuditVerifyResult:
@@ -811,6 +844,31 @@ def _verify_zip(
             issues=issues,
         )
 
+    expected_pack_fingerprint = str(expect_pack_fingerprint or "").strip().lower()
+    expected_pack_fingerprint_match: bool | None = None
+    if expected_pack_fingerprint != "":
+        if not _HEX64.match(expected_pack_fingerprint):
+            expected_pack_fingerprint_match = False
+            issues.append(
+                VerifyIssue(
+                    kind="fingerprint_error",
+                    path=f"{zip_path}!{checksums_name}",
+                    detail=f"invalid expected fingerprint format: {expect_pack_fingerprint}",
+                )
+            )
+        else:
+            expected_pack_fingerprint_match = checksums_sha256.lower() == expected_pack_fingerprint
+            if not expected_pack_fingerprint_match:
+                issues.append(
+                    VerifyIssue(
+                        kind="fingerprint_error",
+                        path=f"{zip_path}!{checksums_name}",
+                        detail="pack fingerprint does not match expected value",
+                        expected_sha256=expected_pack_fingerprint,
+                        actual_sha256=checksums_sha256,
+                    )
+                )
+
     if not strict:
         issues = [i for i in issues if i.kind != "unexpected_file"]
 
@@ -834,6 +892,8 @@ def _verify_zip(
         attestation_verified=attestation_verified,
         attestation_key_id=attestation_key_id,
         attestation_key_source=attestation_key_source,
+        expected_pack_fingerprint=expected_pack_fingerprint,
+        expected_pack_fingerprint_match=expected_pack_fingerprint_match,
         unchecked_files=sorted(unchecked_files),
     )
 
@@ -848,6 +908,7 @@ def verify_audit_pack(
     require_public_key: bool = False,
     require_attestation: bool = False,
     require_attestation_key_match_signature: bool = False,
+    expect_pack_fingerprint: str | None = None,
     trust_embedded_public_key: bool = False,
     revoked_key_ids: set[str] | None = None,
 ) -> AuditVerifyResult:
@@ -863,6 +924,7 @@ def verify_audit_pack(
             require_public_key=require_public_key,
             require_attestation=require_attestation,
             require_attestation_key_match_signature=require_attestation_key_match_signature,
+            expect_pack_fingerprint=expect_pack_fingerprint,
             trust_embedded_public_key=trust_embedded_public_key,
             revoked_key_ids=revoked_key_ids,
         )
@@ -876,6 +938,7 @@ def verify_audit_pack(
             require_public_key=require_public_key,
             require_attestation=require_attestation,
             require_attestation_key_match_signature=require_attestation_key_match_signature,
+            expect_pack_fingerprint=expect_pack_fingerprint,
             trust_embedded_public_key=trust_embedded_public_key,
             revoked_key_ids=revoked_key_ids,
         )

@@ -428,3 +428,51 @@ def test_audit_verify_profile_audit_grade_rejects_signature_attestation_key_mism
     )
     assert cli_res.exit_code == 2
     assert "attestation key_id must match signature key_id in audit-grade mode" in cli_res.output
+
+
+def test_audit_verify_expect_pack_fingerprint_mismatch(sample_run_dir: Path, tmp_path: Path) -> None:
+    _write_finalize_artifacts(sample_run_dir)
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=True,
+    )
+    assert pack_res.zip_path is not None
+
+    private_key, public_key = _write_keypair(tmp_path)
+    sign_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+    attest_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+
+    mismatch = "0" * 64
+    assert mismatch != pack_res.checksums_sha256
+    result = verify_audit_pack(
+        pack_res.zip_path,
+        public_key=public_key,
+        require_signature=True,
+        require_public_key=True,
+        require_attestation=True,
+        expect_pack_fingerprint=mismatch,
+    )
+    assert result.ok is False
+    assert result.expected_pack_fingerprint == mismatch
+    assert result.expected_pack_fingerprint_match is False
+    assert any(issue.kind == "fingerprint_error" for issue in result.issues)
+
+    runner = CliRunner()
+    cli_res = runner.invoke(
+        cli,
+        [
+            "audit-verify",
+            "-p",
+            str(pack_res.zip_path),
+            "--profile",
+            "audit-grade",
+            "--public-key",
+            str(public_key),
+            "--expect-pack-fingerprint",
+            mismatch,
+        ],
+    )
+    assert cli_res.exit_code == 2
+    assert "Expected fingerprint match: False" in cli_res.output

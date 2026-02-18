@@ -115,6 +115,26 @@ def _rewrite_zip_member(
         tmp_zip.replace(zip_path)
 
 
+def _rewrite_handoff_checksums_entry(handoff_dir: Path, *, rel_path: str, sha256_hex: str) -> None:
+    checksums_path = handoff_dir / "handoff_checksums.sha256.txt"
+    lines = checksums_path.read_text(encoding="utf-8").splitlines()
+    target = rel_path.replace("\\", "/")
+    replaced = False
+    out_lines: list[str] = []
+    for line in lines:
+        if line.strip() == "" or line.lstrip().startswith("#"):
+            out_lines.append(line)
+            continue
+        parts = line.split("  ", 1)
+        if len(parts) == 2 and parts[1].strip().replace("\\", "/") == target:
+            out_lines.append(f"{sha256_hex}  {parts[1].strip()}")
+            replaced = True
+        else:
+            out_lines.append(line)
+    assert replaced, f"handoff checksums row not found: {rel_path}"
+    checksums_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+
+
 def test_verify_audit_handoff_happy_path(sample_run_dir: Path, tmp_path: Path) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
     result = verify_audit_handoff(handoff_dir)
@@ -358,3 +378,74 @@ def test_audit_handoff_verify_cli_profile_audit_grade_fails_without_trusted_key(
         or "no --public-key/--public-key-dir was provided" in issue.get("detail", "")
         for issue in payload.get("issues", [])
     )
+
+
+def test_audit_handoff_verify_profile_default_is_diagnostics_mode(sample_run_dir: Path, tmp_path: Path) -> None:
+    handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
+    bundle_zip = handoff_dir / "verifier_bundle.zip"
+    _rewrite_zip_member(
+        bundle_zip,
+        member_suffix="keys/trusted/active.pem",
+        mutate_bytes=lambda b: b,
+        delete=True,
+    )
+    new_bundle_sha = hashlib.sha256(bundle_zip.read_bytes()).hexdigest()
+    _rewrite_handoff_checksums_entry(
+        handoff_dir,
+        rel_path="verifier_bundle.zip",
+        sha256_hex=new_bundle_sha,
+    )
+
+    runner = CliRunner()
+    default_res = runner.invoke(
+        cli,
+        [
+            "audit-handoff-verify",
+            "-d",
+            str(handoff_dir),
+            "--profile",
+            "default",
+            "--enforce",
+        ],
+    )
+    assert default_res.exit_code == 0, default_res.output
+    assert "diagnostics mode" in default_res.output
+
+    audit_res = runner.invoke(
+        cli,
+        [
+            "audit-handoff-verify",
+            "-d",
+            str(handoff_dir),
+            "--profile",
+            "audit-grade",
+            "--enforce",
+        ],
+    )
+    assert audit_res.exit_code == 2
+
+
+def test_audit_handoff_verify_expect_pack_fingerprint_mismatch(sample_run_dir: Path, tmp_path: Path) -> None:
+    handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
+    pack_zip = handoff_dir / "PACK.zip"
+    mismatch = "0" * 64
+    with zipfile.ZipFile(pack_zip, "r") as zf:
+        actual = hashlib.sha256(zf.read("checksums.sha256.txt")).hexdigest()
+    assert mismatch != actual
+
+    runner = CliRunner()
+    res = runner.invoke(
+        cli,
+        [
+            "audit-handoff-verify",
+            "-d",
+            str(handoff_dir),
+            "--profile",
+            "audit-grade",
+            "--expect-pack-fingerprint",
+            mismatch,
+            "--enforce",
+        ],
+    )
+    assert res.exit_code == 2
+    assert "Expected fingerprint match: False" in res.output

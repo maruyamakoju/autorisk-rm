@@ -53,6 +53,9 @@ class AuditHandoffVerifyResult:
     attestation_verified: bool | None
     attestation_key_id: str
     attestation_key_source: str
+    pack_fingerprint: str
+    expected_pack_fingerprint: str
+    expected_pack_fingerprint_match: bool | None
     bundled_validate_report_match: bool | None
     issues: list[HandoffVerifyIssue]
 
@@ -76,6 +79,9 @@ class AuditHandoffVerifyResult:
             "attestation_verified": self.attestation_verified,
             "attestation_key_id": self.attestation_key_id,
             "attestation_key_source": self.attestation_key_source,
+            "pack_fingerprint": self.pack_fingerprint,
+            "expected_pack_fingerprint": self.expected_pack_fingerprint,
+            "expected_pack_fingerprint_match": self.expected_pack_fingerprint_match,
             "bundled_validate_report_match": self.bundled_validate_report_match,
             "ok": self.ok,
             "issues": [asdict(issue) for issue in self.issues],
@@ -388,6 +394,7 @@ def verify_audit_handoff(
     require_attestation: bool = True,
     validate_profile: str = "audit-grade",
     compare_bundled_validate_report: bool = True,
+    expect_pack_fingerprint: str | None = None,
 ) -> AuditHandoffVerifyResult:
     """Verify handoff checksums, then verify and validate bundled PACK.zip."""
     require_attestation_key_match_signature = False
@@ -399,6 +406,13 @@ def verify_audit_handoff(
         validate_profile = "audit-grade"
         compare_bundled_validate_report = True
         require_attestation_key_match_signature = True
+    else:
+        # default profile is diagnostics mode (non-audit acceptance).
+        require_signature = False
+        require_public_key = False
+        require_attestation = False
+        validate_profile = "default"
+        compare_bundled_validate_report = False
 
     handoff_dir_path = Path(handoff_dir).expanduser().resolve()
     if not handoff_dir_path.exists() or not handoff_dir_path.is_dir():
@@ -479,6 +493,9 @@ def verify_audit_handoff(
     attestation_verified: bool | None = None
     attestation_key_id = ""
     attestation_key_source = ""
+    pack_fingerprint = ""
+    expected_pack_fingerprint = str(expect_pack_fingerprint or "").strip().lower()
+    expected_pack_fingerprint_match: bool | None = None
     bundled_validate_report_match: bool | None = None
     finalize_record_obj: dict[str, Any] | None = None
     pack_finalize_record_obj: dict[str, Any] | None = None
@@ -529,6 +546,9 @@ def verify_audit_handoff(
                     attestation_verified=attestation_verified,
                     attestation_key_id=attestation_key_id,
                     attestation_key_source=attestation_key_source,
+                    pack_fingerprint=pack_fingerprint,
+                    expected_pack_fingerprint=expected_pack_fingerprint,
+                    expected_pack_fingerprint_match=expected_pack_fingerprint_match,
                     bundled_validate_report_match=bundled_validate_report_match,
                     issues=issues,
                 )
@@ -536,17 +556,24 @@ def verify_audit_handoff(
             revocation_file = bundle_root / "revoked_key_ids.txt"
             revoked = _load_revoked_key_ids(revocation_file)
 
-            if not trusted_keys_dir.exists() or not trusted_keys_dir.is_dir():
+            if require_public_key and (not trusted_keys_dir.exists() or not trusted_keys_dir.is_dir()):
                 issues.append(HandoffVerifyIssue(kind="missing_file", path=str(trusted_keys_dir), detail="missing trusted key directory"))
+
+            verify_public_key_dir = (
+                trusted_keys_dir
+                if (require_public_key and trusted_keys_dir.exists() and trusted_keys_dir.is_dir())
+                else None
+            )
 
             verify_res = verify_audit_pack(
                 pack_path,
                 strict=strict,
-                public_key_dir=trusted_keys_dir if trusted_keys_dir.exists() else None,
+                public_key_dir=verify_public_key_dir,
                 require_signature=require_signature,
                 require_public_key=require_public_key,
                 require_attestation=require_attestation,
                 require_attestation_key_match_signature=require_attestation_key_match_signature,
+                expect_pack_fingerprint=expected_pack_fingerprint,
                 revoked_key_ids=revoked,
             )
             audit_verify_ok = verify_res.ok
@@ -554,6 +581,9 @@ def verify_audit_handoff(
             attestation_verified = verify_res.attestation_verified
             attestation_key_id = str(verify_res.attestation_key_id or "")
             attestation_key_source = str(verify_res.attestation_key_source or "")
+            pack_fingerprint = str(verify_res.checksums_sha256 or "")
+            expected_pack_fingerprint = str(verify_res.expected_pack_fingerprint or "")
+            expected_pack_fingerprint_match = verify_res.expected_pack_fingerprint_match
             for issue in verify_res.issues:
                 issues.append(
                     HandoffVerifyIssue(
@@ -635,7 +665,7 @@ def verify_audit_handoff(
             source_label=f"PACK.zip!{PACK_FINALIZE_RECORD_REL}",
             issues=issues,
         )
-    elif pack_finalize_record_obj is not None and attestation_verified is not True:
+    elif pack_finalize_record_obj is not None and require_attestation and attestation_verified is not True:
         issues.append(
             HandoffVerifyIssue(
                 kind="finalize_record_error",
@@ -659,6 +689,9 @@ def verify_audit_handoff(
         attestation_verified=attestation_verified,
         attestation_key_id=attestation_key_id,
         attestation_key_source=attestation_key_source,
+        pack_fingerprint=pack_fingerprint,
+        expected_pack_fingerprint=expected_pack_fingerprint,
+        expected_pack_fingerprint_match=expected_pack_fingerprint_match,
         bundled_validate_report_match=bundled_validate_report_match,
         issues=issues,
     )
