@@ -28,9 +28,9 @@ graph LR
 ## Key Features
 
 - **Multi-signal danger mining**: Fuses audio (RMS, delta-RMS, horn-band detection), optical flow (Farneback magnitude + variance), and object proximity (YOLOv8n bbox area + center distance) with configurable weights
-- **Cosmos Reason 2 video understanding**: Local inference on GPU with `nvidia/Cosmos-Reason2-8B` (Qwen3VL backbone, float16, ~16 GB VRAM). Produces structured JSON with severity, hazard details, causal reasoning, predictions, and recommended actions
+- **Cosmos Reason 2 video understanding**: Local inference on GPU with `nvidia/Cosmos-Reason2-8B` (Qwen3VL backbone). Official guidance: >=32 GB VRAM, BF16 recommended. Produces structured JSON with severity, hazard details, causal reasoning, predictions, and recommended actions
 - **100% JSON parse success**: Robust multi-layer parsing with truncation repair (direct JSON → markdown fence → open fence + truncation repair → brace extraction → missing comma fix → trailing key cleanup → markdown field parser)
-- **Reproducible Public Mode**: One-command pipeline using publicly available dashcam footage with blind-labeled ground truth
+- **Reproducible Public Mode**: One-command pipeline using user-provided or rights-cleared public footage with blind-labeled ground truth
 - **Interactive Streamlit dashboard**: 7-page UI for exploring results across multiple runs
 
 ## Quickstart
@@ -45,6 +45,7 @@ cp .env.example .env
 # Add your HF_TOKEN (for gated Cosmos model access)
 
 # 3. Run full pipeline on public video
+# (Use a rights-cleared local source path)
 python -m autorisk.cli -c configs/public.yaml run \
   -i data/public_samples/uk_dashcam_compilation.mp4 \
   -o outputs/public_run
@@ -52,6 +53,26 @@ python -m autorisk.cli -c configs/public.yaml run \
 # 4. View results
 streamlit run autorisk/dashboard/app.py
 # Or: Open outputs/public_run/report.html in browser
+```
+
+See `DATA_SOURCES.md` for source policy, rights notes, and redistribution rules.
+
+## Judge One-Command (Audit Grade)
+
+Use one command to produce handoff artifacts, sign, verify, and print pack fingerprint.
+
+```bash
+# Linux/macOS
+bash scripts/judge_run.sh
+
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -File scripts/judge_run.ps1
+```
+
+If your source video is not at `data/public_samples/uk_dashcam_compilation.mp4`, set:
+
+```bash
+AUTORISK_INPUT_VIDEO=/path/to/rights-cleared-video.mp4
 ```
 
 ## Interactive Dashboard
@@ -168,13 +189,13 @@ Major miss (off by 2+ levels):               3 errors (23%)
 
 ## Public Mode (Reproducible Evaluation)
 
-Public Mode uses a freely available dashcam compilation for fully reproducible results.
+Public Mode uses user-provided or rights-cleared sources for reproducible evaluation.
 
 ### Step 1: Download source video
 
 ```bash
-# Option A: Automated download
-python scripts/download_public_data.py
+# Option A: Automated download with explicit rights acknowledgement
+python scripts/download_public_data.py --ack-data-rights --config configs/public.yaml
 
 # Option B: Manual download (if yt-dlp fails)
 # yt-dlp -f 18 -o "data/public_samples/uk_dashcam_compilation.mp4" "https://www.youtube.com/watch?v=i7HspkH7aT4"
@@ -184,6 +205,8 @@ Source: [UK Dash Camera Compilation #1](https://www.youtube.com/watch?v=i7HspkH7
 
 **Data usage note**: The source video is publicly available on YouTube under standard YouTube license. It is **not redistributed** in this repository — users download it directly from the original source via `yt-dlp` or manual download. Only the extracted 10-second analysis clips (transformative, analytical use) and ground-truth annotations (original work) are used for evaluation. No video data is included in the git repository.
 
+**Policy note**: AutoRisk-RM does not grant source-media rights. You must review and confirm license/usage rights for any third-party input. See `DATA_SOURCES.md`.
+
 ### Step 2: Run pipeline
 
 ```bash
@@ -192,6 +215,10 @@ Source: [UK Dash Camera Compilation #1](https://www.youtube.com/watch?v=i7HspkH7
 python -m autorisk.cli -c configs/public.yaml run \
   -i data/public_samples/uk_dashcam_compilation.mp4 \
   -o outputs/public_run
+
+# Optional: if --input does not exist, allow explicit auto-download from config source_url
+# python -m autorisk.cli -c configs/public.yaml run --mode public --allow-public-download \
+#   -i data/public_samples/uk_dashcam_compilation.mp4 -o outputs/public_run
 ```
 
 ### Step 3: Evaluate and ablation (after inference completes)
@@ -376,7 +403,7 @@ python -m autorisk.cli multi-validate \
 
 - Python 3.10+
 - PyTorch 2.0+ with CUDA (install separately from [pytorch.org](https://pytorch.org/get-started/locally/) — not included in `pip install -e .` to avoid CPU-only fallback)
-- NVIDIA GPU with 16+ GB VRAM (RTX 4090/5090 recommended)
+- NVIDIA GPU with >=32 GB VRAM for official Cosmos-Reason2-8B guidance (BF16 recommended)
 - ~17 GB disk for Cosmos-Reason2-8B model weights
 - HuggingFace account with [model access](https://huggingface.co/nvidia/Cosmos-Reason2-8B)
 - FFmpeg 7+ (for clip extraction)
@@ -410,8 +437,11 @@ data/
   multi_video/    # Downloaded dashcam videos (5 min clips)
 scripts/
   download_public_data.py     # Public video downloader (yt-dlp)
+  judge_run.sh                # One-command audit-grade run (Linux/macOS)
+  judge_run.ps1               # One-command audit-grade run (PowerShell)
   run_all_inference.py        # Multi-video pipeline runner (unattended)
   generate_submission_metrics.py  # Cross-source submission metrics generator
+DATA_SOURCES.md   # Source policy and rights guidance
 ```
 
 ## License

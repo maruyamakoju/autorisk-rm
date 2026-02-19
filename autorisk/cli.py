@@ -252,6 +252,11 @@ def cli(ctx: click.Context, config: str | None, verbose: bool) -> None:
 @click.option("--skip-ablation", is_flag=True, help="Skip ablation study")
 @click.option("--skip-report", is_flag=True, help="Skip report generation")
 @click.option("--mode", default="default", help="Run mode: default or public")
+@click.option(
+    "--allow-public-download",
+    is_flag=True,
+    help="Allow mode=public to auto-download third-party video when --input path is missing",
+)
 @click.pass_context
 def run(
     ctx: click.Context,
@@ -261,6 +266,7 @@ def run(
     skip_ablation: bool,
     skip_report: bool,
     mode: str,
+    allow_public_download: bool,
 ) -> None:
     """Run the full AutoRisk-RM pipeline (B1 -> B2 -> B3 -> B4 -> B5 -> Report)."""
     import json
@@ -276,9 +282,23 @@ def run(
     pipeline = Pipeline(cfg)
 
     if mode == "public" and not Path(video_path).exists():
-        click.echo("Public mode: downloading sample videos...")
+        if not allow_public_download:
+            click.echo(
+                (
+                    "Error: public mode input is missing and automatic third-party download is disabled. "
+                    "Provide a licensed local video path, or re-run with --allow-public-download "
+                    "after confirming rights to the source."
+                ),
+                err=True,
+            )
+            click.echo(
+                "Hint: python scripts/download_public_data.py --ack-data-rights --config configs/public.yaml",
+                err=True,
+            )
+            raise SystemExit(2)
+        click.echo("Public mode: downloading source video(s)...")
         from scripts.download_public_data import download_public_videos
-        videos = download_public_videos(cfg)
+        videos = download_public_videos(cfg, allow_third_party=True)
         if videos:
             video_path = str(videos[0])
         else:
