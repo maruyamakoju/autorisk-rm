@@ -172,9 +172,10 @@ def _rewrite_zip_member(
     with tempfile.TemporaryDirectory(prefix="autorisk-test-zip-rewrite-") as tmp_dir:
         tmp_zip = Path(tmp_dir) / zip_path.name
         found = False
-        with zipfile.ZipFile(zip_path, "r") as src, zipfile.ZipFile(
-            tmp_zip, "w", compression=zipfile.ZIP_DEFLATED
-        ) as dst:
+        with (
+            zipfile.ZipFile(zip_path, "r") as src,
+            zipfile.ZipFile(tmp_zip, "w", compression=zipfile.ZIP_DEFLATED) as dst,
+        ):
             for info in src.infolist():
                 if info.is_dir():
                     dst.writestr(info, b"")
@@ -190,7 +191,9 @@ def _rewrite_zip_member(
         tmp_zip.replace(zip_path)
 
 
-def test_audit_verify_require_attestation_happy_path(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_verify_require_attestation_happy_path(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     _write_finalize_artifacts(sample_run_dir)
     pack_res = build_audit_pack(
         run_dir=sample_run_dir,
@@ -201,8 +204,12 @@ def test_audit_verify_require_attestation_happy_path(sample_run_dir: Path, tmp_p
     assert pack_res.zip_path is not None
 
     private_key, public_key = _write_keypair(tmp_path)
-    sign_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
-    attest_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+    sign_audit_pack(
+        pack_res.zip_path, private_key_path=private_key, public_key_path=public_key
+    )
+    attest_audit_pack(
+        pack_res.zip_path, private_key_path=private_key, public_key_path=public_key
+    )
 
     result = verify_audit_pack(
         pack_res.zip_path,
@@ -216,7 +223,9 @@ def test_audit_verify_require_attestation_happy_path(sample_run_dir: Path, tmp_p
     assert result.attestation_verified is True
 
 
-def test_audit_verify_require_attestation_fails_when_missing(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_verify_require_attestation_fails_when_missing(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     _write_finalize_artifacts(sample_run_dir)
     pack_res = build_audit_pack(
         run_dir=sample_run_dir,
@@ -227,7 +236,9 @@ def test_audit_verify_require_attestation_fails_when_missing(sample_run_dir: Pat
     assert pack_res.zip_path is not None
 
     private_key, public_key = _write_keypair(tmp_path)
-    sign_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+    sign_audit_pack(
+        pack_res.zip_path, private_key_path=private_key, public_key_path=public_key
+    )
 
     result = verify_audit_pack(
         pack_res.zip_path,
@@ -237,10 +248,15 @@ def test_audit_verify_require_attestation_fails_when_missing(sample_run_dir: Pat
         require_attestation=True,
     )
     assert result.ok is False
-    assert any(issue.kind == "attestation_error" and "not found" in issue.detail for issue in result.issues)
+    assert any(
+        issue.kind == "attestation_error" and "not found" in issue.detail
+        for issue in result.issues
+    )
 
 
-def test_audit_verify_detects_attestation_mismatch_on_finalize_tamper(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_verify_detects_attestation_mismatch_on_finalize_tamper(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     _write_finalize_artifacts(sample_run_dir)
     pack_res = build_audit_pack(
         run_dir=sample_run_dir,
@@ -251,8 +267,12 @@ def test_audit_verify_detects_attestation_mismatch_on_finalize_tamper(sample_run
     assert pack_res.zip_path is not None
 
     private_key, public_key = _write_keypair(tmp_path)
-    sign_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
-    attest_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+    sign_audit_pack(
+        pack_res.zip_path, private_key_path=private_key, public_key_path=public_key
+    )
+    attest_audit_pack(
+        pack_res.zip_path, private_key_path=private_key, public_key_path=public_key
+    )
 
     def _mutate_finalize_record(payload: bytes) -> bytes:
         obj = json.loads(payload.decode("utf-8"))
@@ -279,7 +299,9 @@ def test_audit_verify_detects_attestation_mismatch_on_finalize_tamper(sample_run
     )
 
 
-def test_audit_verify_rejects_unknown_attestation_schema_version(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_verify_rejects_unknown_attestation_schema_version(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     _write_finalize_artifacts(sample_run_dir)
     pack_res = build_audit_pack(
         run_dir=sample_run_dir,
@@ -290,8 +312,12 @@ def test_audit_verify_rejects_unknown_attestation_schema_version(sample_run_dir:
     assert pack_res.zip_path is not None
 
     private_key, public_key = _write_keypair(tmp_path)
-    sign_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
-    attest_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+    sign_audit_pack(
+        pack_res.zip_path, private_key_path=private_key, public_key_path=public_key
+    )
+    attest_audit_pack(
+        pack_res.zip_path, private_key_path=private_key, public_key_path=public_key
+    )
 
     def _mutate_attestation(payload: bytes) -> bytes:
         obj = json.loads(payload.decode("utf-8"))
@@ -319,7 +345,9 @@ def test_audit_verify_rejects_unknown_attestation_schema_version(sample_run_dir:
     )
 
 
-def test_audit_verify_cli_profile_audit_grade_enforces_flags(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_verify_cli_profile_audit_grade_enforces_flags(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     _write_finalize_artifacts(sample_run_dir)
     pack_res = build_audit_pack(
         run_dir=sample_run_dir,
@@ -375,7 +403,9 @@ def test_audit_verify_cli_profile_audit_grade_enforces_flags(sample_run_dir: Pat
     assert "Attestation verified: True" in res_ok.output
 
 
-def test_audit_verify_cli_profile_default_prints_diagnostics_warning(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_verify_cli_profile_default_prints_diagnostics_warning(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     _write_finalize_artifacts(sample_run_dir)
     pack_res = build_audit_pack(
         run_dir=sample_run_dir,
@@ -436,8 +466,12 @@ def test_audit_verify_profile_audit_grade_rejects_signature_attestation_key_mism
     private_a, public_a = _write_keypair(key_a_dir)
     private_b, public_b = _write_keypair(key_b_dir)
 
-    sign_audit_pack(pack_res.zip_path, private_key_path=private_a, public_key_path=public_a)
-    attest_audit_pack(pack_res.zip_path, private_key_path=private_b, public_key_path=public_b)
+    sign_audit_pack(
+        pack_res.zip_path, private_key_path=private_a, public_key_path=public_a
+    )
+    attest_audit_pack(
+        pack_res.zip_path, private_key_path=private_b, public_key_path=public_b
+    )
 
     keyring_dir = tmp_path / "trusted_keys"
     keyring_dir.mkdir(parents=True, exist_ok=True)
@@ -456,7 +490,6 @@ def test_audit_verify_profile_audit_grade_rejects_signature_attestation_key_mism
     assert default_verify.attestation_verified is True
 
     runner = CliRunner()
-    out_json = tmp_path / "verify_expect_fp.json"
     cli_res = runner.invoke(
         cli,
         [
@@ -470,10 +503,15 @@ def test_audit_verify_profile_audit_grade_rejects_signature_attestation_key_mism
         ],
     )
     assert cli_res.exit_code == 2
-    assert "attestation key_id must match signature key_id in audit-grade mode" in cli_res.output
+    assert (
+        "attestation key_id must match signature key_id in audit-grade mode"
+        in cli_res.output
+    )
 
 
-def test_audit_verify_expect_pack_fingerprint_mismatch(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_verify_expect_pack_fingerprint_mismatch(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     _write_finalize_artifacts(sample_run_dir)
     pack_res = build_audit_pack(
         run_dir=sample_run_dir,
@@ -484,8 +522,12 @@ def test_audit_verify_expect_pack_fingerprint_mismatch(sample_run_dir: Path, tmp
     assert pack_res.zip_path is not None
 
     private_key, public_key = _write_keypair(tmp_path)
-    sign_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
-    attest_audit_pack(pack_res.zip_path, private_key_path=private_key, public_key_path=public_key)
+    sign_audit_pack(
+        pack_res.zip_path, private_key_path=private_key, public_key_path=public_key
+    )
+    attest_audit_pack(
+        pack_res.zip_path, private_key_path=private_key, public_key_path=public_key
+    )
 
     mismatch = "0" * 64
     assert mismatch != pack_res.checksums_sha256

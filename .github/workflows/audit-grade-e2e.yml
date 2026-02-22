@@ -21,7 +21,7 @@ jobs:
       - name: Install Tooling
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest build click omegaconf python-dotenv cryptography pydantic numpy scipy opencv-python tqdm jsonschema
+          python -m pip install pytest build click omegaconf python-dotenv cryptography pydantic numpy scipy opencv-python tqdm jsonschema ruff mypy
 
       - name: Resource Drift Check
         run: |
@@ -54,6 +54,42 @@ jobs:
                   f"config drift: {src} vs {pkg}"
               )
           PY
+
+      - name: Static Analysis (Audit Contracts + CLI Split)
+        run: |
+          ruff check \
+            autorisk/audit/sign.py \
+            autorisk/audit/attestation.py \
+            autorisk/audit/verify.py \
+            autorisk/audit/handoff_verify.py \
+            autorisk/audit/contracts.py \
+            autorisk/cli_commands \
+            tests/test_audit_sign.py \
+            tests/test_audit_verify.py \
+            tests/test_audit_handoff_verify.py \
+            tests/test_finalize_run_cli.py \
+            tests/test_cli_registry.py \
+            tests/test_audit_contracts.py
+          ruff format --check \
+            autorisk/audit/sign.py \
+            autorisk/audit/attestation.py \
+            autorisk/audit/verify.py \
+            autorisk/audit/handoff_verify.py \
+            autorisk/audit/contracts.py \
+            autorisk/cli_commands \
+            tests/test_audit_sign.py \
+            tests/test_audit_verify.py \
+            tests/test_audit_handoff_verify.py \
+            tests/test_finalize_run_cli.py \
+            tests/test_cli_registry.py \
+            tests/test_audit_contracts.py
+          mypy --follow-imports=skip \
+            autorisk/audit/sign.py \
+            autorisk/audit/attestation.py \
+            autorisk/audit/verify.py \
+            autorisk/audit/handoff_verify.py \
+            autorisk/audit/contracts.py \
+            autorisk/cli_commands
 
       - name: Unit Tests (Source Tree)
         run: |

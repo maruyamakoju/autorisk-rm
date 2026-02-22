@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import shutil
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from autorisk.audit._crypto import sha256_file
 from autorisk.utils.logger import setup_logger
 
 log = setup_logger(__name__)
@@ -29,14 +29,6 @@ def _utc_now_slug() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def _zip_dir(source_dir: Path, output_zip: Path) -> None:
     with zipfile.ZipFile(output_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for p in sorted(source_dir.rglob("*")):
@@ -52,7 +44,7 @@ def _write_checksums(output_dir: Path) -> Path:
         rel = p.relative_to(output_dir).as_posix()
         if rel in {"handoff_checksums.sha256.txt", "finalize_record.json", "PACK.zip"}:
             continue
-        rows.append((_sha256_file(p), rel))
+        rows.append((sha256_file(p), rel))
     checksums_path = output_dir / "handoff_checksums.sha256.txt"
     checksums_path.write_text(
         "\n".join(f"{sha}  {rel}" for sha, rel in rows) + ("\n" if rows else ""),

@@ -5,7 +5,6 @@ Supports both directories and zip bundles created by `autorisk audit-pack`.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import zipfile
@@ -18,6 +17,11 @@ from autorisk.audit.attestation import (
     FINALIZE_RECORD_REL,
     VALIDATE_REPORT_REL,
     verify_attestation_document,
+)
+from autorisk.audit._crypto import (
+    sha256_bytes as _sha256_bytes_common,
+    sha256_file as _sha256_file_common,
+    sha256_stream as _sha256_stream_common,
 )
 from autorisk.audit.sign import (
     MANIFEST_FILENAME,
@@ -109,15 +113,11 @@ _LINE = re.compile(r"^([0-9a-fA-F]{64})\s{2}(.+)$")
 
 
 def _sha256_stream(fp) -> str:
-    h = hashlib.sha256()
-    for chunk in iter(lambda: fp.read(1024 * 1024), b""):
-        h.update(chunk)
-    return h.hexdigest()
+    return _sha256_stream_common(fp)
 
 
 def sha256_file(path: Path) -> str:
-    with path.open("rb") as f:
-        return _sha256_stream(f)
+    return _sha256_file_common(path)
 
 
 def _parse_checksums_text(
@@ -174,9 +174,8 @@ def _verify_signature(
     key_source = ""
 
     has_explicit_public_key = (
-        (public_key is not None and str(public_key).strip() != "")
-        or (public_key_dir is not None and str(public_key_dir).strip() != "")
-    )
+        public_key is not None and str(public_key).strip() != ""
+    ) or (public_key_dir is not None and str(public_key_dir).strip() != "")
     if require_public_key and not has_explicit_public_key:
         issues.append(
             VerifyIssue(
@@ -227,6 +226,7 @@ def _verify_signature(
             public_key_path=public_key,
             public_key_dir=public_key_dir,
             signature_doc=signature_doc,
+            key_id_hint=key_id,
             trust_embedded_public_key=trust_embedded_public_key,
         )
     except Exception as exc:
@@ -342,6 +342,7 @@ def _verify_attestation(
             public_key_path=public_key,
             public_key_dir=public_key_dir,
             signature_doc=attestation_doc,
+            key_id_hint=key_id,
             trust_embedded_public_key=trust_embedded_public_key,
         )
     except Exception as exc:
@@ -436,7 +437,9 @@ def _verify_dir(
     revoked_key_ids: set[str] | None = None,
 ) -> AuditVerifyResult:
     pack_dir = pack_dir.resolve()
-    candidates = sorted(pack_dir.rglob(CHECKSUMS_FILENAME), key=lambda p: (len(p.parts), str(p)))
+    candidates = sorted(
+        pack_dir.rglob(CHECKSUMS_FILENAME), key=lambda p: (len(p.parts), str(p))
+    )
     if not candidates:
         raise FileNotFoundError(f"missing {CHECKSUMS_FILENAME} under: {pack_dir}")
 
@@ -446,7 +449,9 @@ def _verify_dir(
     checksums_text = checksums_path.read_text(encoding="utf-8", errors="replace")
     checksums_sha256 = sha256_file(checksums_path)
 
-    entries, parse_issues = _parse_checksums_text(checksums_text, display_path=str(checksums_path))
+    entries, parse_issues = _parse_checksums_text(
+        checksums_text, display_path=str(checksums_path)
+    )
     issues: list[VerifyIssue] = list(parse_issues)
     unchecked_files: set[str] = set()
 
@@ -476,7 +481,9 @@ def _verify_dir(
     for rel, expected_sha in expected_by_path.items():
         target = pack_root / rel
         if not target.exists():
-            issues.append(VerifyIssue(kind="missing_file", path=rel, expected_sha256=expected_sha))
+            issues.append(
+                VerifyIssue(kind="missing_file", path=rel, expected_sha256=expected_sha)
+            )
             continue
         if not target.is_file():
             issues.append(VerifyIssue(kind="io_error", path=rel, detail="not a file"))
@@ -506,7 +513,9 @@ def _verify_dir(
     signature_present = signature_path.exists() and signature_path.is_file()
     if signature_present:
         try:
-            loaded = json.loads(signature_path.read_text(encoding="utf-8", errors="replace"))
+            loaded = json.loads(
+                signature_path.read_text(encoding="utf-8", errors="replace")
+            )
             if isinstance(loaded, dict):
                 signature_doc = loaded
             else:
@@ -518,21 +527,31 @@ def _verify_dir(
                     )
                 )
         except Exception as exc:
-            issues.append(VerifyIssue(kind="signature_error", path=str(signature_path), detail=str(exc)[:200]))
+            issues.append(
+                VerifyIssue(
+                    kind="signature_error",
+                    path=str(signature_path),
+                    detail=str(exc)[:200],
+                )
+            )
 
-    signature_present, signature_verified, signature_key_id, signature_key_source = _verify_signature(
-        signature_present=signature_present,
-        signature_doc=signature_doc,
-        signature_path=str(signature_path),
-        checksums_sha256=checksums_sha256,
-        manifest_sha256=manifest_sha256,
-        public_key=public_key,
-        public_key_dir=public_key_dir,
-        require_signature=require_signature,
-        require_public_key=require_public_key,
-        trust_embedded_public_key=trust_embedded_public_key,
-        revoked_key_ids={s.strip().lower() for s in (revoked_key_ids or set()) if s.strip() != ""},
-        issues=issues,
+    signature_present, signature_verified, signature_key_id, signature_key_source = (
+        _verify_signature(
+            signature_present=signature_present,
+            signature_doc=signature_doc,
+            signature_path=str(signature_path),
+            checksums_sha256=checksums_sha256,
+            manifest_sha256=manifest_sha256,
+            public_key=public_key,
+            public_key_dir=public_key_dir,
+            require_signature=require_signature,
+            require_public_key=require_public_key,
+            trust_embedded_public_key=trust_embedded_public_key,
+            revoked_key_ids={
+                s.strip().lower() for s in (revoked_key_ids or set()) if s.strip() != ""
+            },
+            issues=issues,
+        )
     )
 
     finalize_record_sha256 = ""
@@ -549,7 +568,9 @@ def _verify_dir(
     attestation_present = attestation_path.exists() and attestation_path.is_file()
     if attestation_present:
         try:
-            loaded = json.loads(attestation_path.read_text(encoding="utf-8", errors="replace"))
+            loaded = json.loads(
+                attestation_path.read_text(encoding="utf-8", errors="replace")
+            )
             if isinstance(loaded, dict):
                 attestation_doc = loaded
             else:
@@ -561,9 +582,20 @@ def _verify_dir(
                     )
                 )
         except Exception as exc:
-            issues.append(VerifyIssue(kind="attestation_error", path=str(attestation_path), detail=str(exc)[:200]))
+            issues.append(
+                VerifyIssue(
+                    kind="attestation_error",
+                    path=str(attestation_path),
+                    detail=str(exc)[:200],
+                )
+            )
 
-    attestation_present, attestation_verified, attestation_key_id, attestation_key_source = _verify_attestation(
+    (
+        attestation_present,
+        attestation_verified,
+        attestation_key_id,
+        attestation_key_source,
+    ) = _verify_attestation(
         attestation_present=attestation_present,
         attestation_doc=attestation_doc,
         attestation_path=str(attestation_path),
@@ -574,7 +606,9 @@ def _verify_dir(
         public_key_dir=public_key_dir,
         require_attestation=require_attestation,
         trust_embedded_public_key=trust_embedded_public_key,
-        revoked_key_ids={s.strip().lower() for s in (revoked_key_ids or set()) if s.strip() != ""},
+        revoked_key_ids={
+            s.strip().lower() for s in (revoked_key_ids or set()) if s.strip() != ""
+        },
         issues=issues,
     )
     _enforce_attestation_key_match_signature(
@@ -600,7 +634,9 @@ def _verify_dir(
                 )
             )
         else:
-            expected_pack_fingerprint_match = checksums_sha256.lower() == expected_pack_fingerprint
+            expected_pack_fingerprint_match = (
+                checksums_sha256.lower() == expected_pack_fingerprint
+            )
             if not expected_pack_fingerprint_match:
                 issues.append(
                     VerifyIssue(
@@ -659,9 +695,15 @@ def _verify_zip(
     unchecked_files: set[str] = set()
 
     with zipfile.ZipFile(zip_path, "r") as zf:
-        members = [n for n in zf.namelist() if n.endswith(CHECKSUMS_FILENAME) and not n.endswith("/")]
+        members = [
+            n
+            for n in zf.namelist()
+            if n.endswith(CHECKSUMS_FILENAME) and not n.endswith("/")
+        ]
         if not members:
-            raise FileNotFoundError(f"missing {CHECKSUMS_FILENAME} inside zip: {zip_path}")
+            raise FileNotFoundError(
+                f"missing {CHECKSUMS_FILENAME} inside zip: {zip_path}"
+            )
 
         checksums_name = min(members, key=lambda n: (n.count("/"), len(n)))
         prefix = checksums_name[: -len(CHECKSUMS_FILENAME)]
@@ -669,10 +711,12 @@ def _verify_zip(
             prefix = prefix[:-1]
 
         checksums_bytes = zf.read(checksums_name)
-        checksums_sha256 = hashlib.sha256(checksums_bytes).hexdigest()
+        checksums_sha256 = _sha256_bytes_common(checksums_bytes)
         checksums_text = checksums_bytes.decode("utf-8", errors="replace")
 
-        entries, parse_issues = _parse_checksums_text(checksums_text, display_path=f"{zip_path}!{checksums_name}")
+        entries, parse_issues = _parse_checksums_text(
+            checksums_text, display_path=f"{zip_path}!{checksums_name}"
+        )
         issues.extend(parse_issues)
 
         expected_by_path: dict[str, str] = {rel: sha for sha, rel in entries}
@@ -680,11 +724,27 @@ def _verify_zip(
 
         root_prefix = f"{prefix}/" if prefix else ""
         member_set = set(zf.namelist())
-        signature_name = f"{root_prefix}{SIGNATURE_FILENAME}" if root_prefix else SIGNATURE_FILENAME
-        attestation_name = f"{root_prefix}{ATTESTATION_FILENAME}" if root_prefix else ATTESTATION_FILENAME
-        manifest_name = f"{root_prefix}{MANIFEST_FILENAME}" if root_prefix else MANIFEST_FILENAME
-        finalize_record_name = f"{root_prefix}{FINALIZE_RECORD_REL}" if root_prefix else FINALIZE_RECORD_REL
-        validate_report_name = f"{root_prefix}{VALIDATE_REPORT_REL}" if root_prefix else VALIDATE_REPORT_REL
+        signature_name = (
+            f"{root_prefix}{SIGNATURE_FILENAME}" if root_prefix else SIGNATURE_FILENAME
+        )
+        attestation_name = (
+            f"{root_prefix}{ATTESTATION_FILENAME}"
+            if root_prefix
+            else ATTESTATION_FILENAME
+        )
+        manifest_name = (
+            f"{root_prefix}{MANIFEST_FILENAME}" if root_prefix else MANIFEST_FILENAME
+        )
+        finalize_record_name = (
+            f"{root_prefix}{FINALIZE_RECORD_REL}"
+            if root_prefix
+            else FINALIZE_RECORD_REL
+        )
+        validate_report_name = (
+            f"{root_prefix}{VALIDATE_REPORT_REL}"
+            if root_prefix
+            else VALIDATE_REPORT_REL
+        )
 
         actual_set: set[str] = set()
         for name in member_set:
@@ -697,10 +757,14 @@ def _verify_zip(
             if prefix:
                 if not name.startswith(root_prefix):
                     issues.append(
-                        VerifyIssue(kind="unexpected_file", path=name, detail="outside pack root")
+                        VerifyIssue(
+                            kind="unexpected_file",
+                            path=name,
+                            detail="outside pack root",
+                        )
                     )
                     continue
-                rel = name[len(root_prefix):]
+                rel = name[len(root_prefix) :]
             else:
                 rel = name
             if rel in _OPTIONAL_UNCHECKSUMED_FILES:
@@ -717,7 +781,11 @@ def _verify_zip(
         for rel, expected_sha in expected_by_path.items():
             member_name = f"{root_prefix}{rel}" if root_prefix else rel
             if member_name not in member_set:
-                issues.append(VerifyIssue(kind="missing_file", path=rel, expected_sha256=expected_sha))
+                issues.append(
+                    VerifyIssue(
+                        kind="missing_file", path=rel, expected_sha256=expected_sha
+                    )
+                )
                 continue
             try:
                 with zf.open(member_name, "r") as fp:
@@ -733,20 +801,28 @@ def _verify_zip(
                         )
                     )
             except Exception as exc:
-                issues.append(VerifyIssue(kind="io_error", path=rel, detail=str(exc)[:200]))
+                issues.append(
+                    VerifyIssue(kind="io_error", path=rel, detail=str(exc)[:200])
+                )
 
         manifest_sha256 = ""
         if manifest_name in member_set:
             try:
-                manifest_sha256 = hashlib.sha256(zf.read(manifest_name)).hexdigest()
+                manifest_sha256 = _sha256_bytes_common(zf.read(manifest_name))
             except Exception as exc:
-                issues.append(VerifyIssue(kind="io_error", path=manifest_name, detail=str(exc)[:200]))
+                issues.append(
+                    VerifyIssue(
+                        kind="io_error", path=manifest_name, detail=str(exc)[:200]
+                    )
+                )
 
         signature_doc: dict[str, Any] | None = None
         signature_present = signature_name in member_set
         if signature_present:
             try:
-                signature_raw = zf.read(signature_name).decode("utf-8", errors="replace")
+                signature_raw = zf.read(signature_name).decode(
+                    "utf-8", errors="replace"
+                )
                 loaded = json.loads(signature_raw)
                 if isinstance(loaded, dict):
                     signature_doc = loaded
@@ -767,7 +843,12 @@ def _verify_zip(
                     )
                 )
 
-        signature_present, signature_verified, signature_key_id, signature_key_source = _verify_signature(
+        (
+            signature_present,
+            signature_verified,
+            signature_key_id,
+            signature_key_source,
+        ) = _verify_signature(
             signature_present=signature_present,
             signature_doc=signature_doc,
             signature_path=f"{zip_path}!{signature_name}",
@@ -778,28 +859,48 @@ def _verify_zip(
             require_signature=require_signature,
             require_public_key=require_public_key,
             trust_embedded_public_key=trust_embedded_public_key,
-            revoked_key_ids={s.strip().lower() for s in (revoked_key_ids or set()) if s.strip() != ""},
+            revoked_key_ids={
+                s.strip().lower() for s in (revoked_key_ids or set()) if s.strip() != ""
+            },
             issues=issues,
         )
 
         finalize_record_sha256 = ""
         if finalize_record_name in member_set:
             try:
-                finalize_record_sha256 = hashlib.sha256(zf.read(finalize_record_name)).hexdigest()
+                finalize_record_sha256 = _sha256_bytes_common(
+                    zf.read(finalize_record_name)
+                )
             except Exception as exc:
-                issues.append(VerifyIssue(kind="io_error", path=finalize_record_name, detail=str(exc)[:200]))
+                issues.append(
+                    VerifyIssue(
+                        kind="io_error",
+                        path=finalize_record_name,
+                        detail=str(exc)[:200],
+                    )
+                )
         finalize_report_sha256 = ""
         if validate_report_name in member_set:
             try:
-                finalize_report_sha256 = hashlib.sha256(zf.read(validate_report_name)).hexdigest()
+                finalize_report_sha256 = _sha256_bytes_common(
+                    zf.read(validate_report_name)
+                )
             except Exception as exc:
-                issues.append(VerifyIssue(kind="io_error", path=validate_report_name, detail=str(exc)[:200]))
+                issues.append(
+                    VerifyIssue(
+                        kind="io_error",
+                        path=validate_report_name,
+                        detail=str(exc)[:200],
+                    )
+                )
 
         attestation_doc: dict[str, Any] | None = None
         attestation_present = attestation_name in member_set
         if attestation_present:
             try:
-                attestation_raw = zf.read(attestation_name).decode("utf-8", errors="replace")
+                attestation_raw = zf.read(attestation_name).decode(
+                    "utf-8", errors="replace"
+                )
                 loaded = json.loads(attestation_raw)
                 if isinstance(loaded, dict):
                     attestation_doc = loaded
@@ -820,7 +921,12 @@ def _verify_zip(
                     )
                 )
 
-        attestation_present, attestation_verified, attestation_key_id, attestation_key_source = _verify_attestation(
+        (
+            attestation_present,
+            attestation_verified,
+            attestation_key_id,
+            attestation_key_source,
+        ) = _verify_attestation(
             attestation_present=attestation_present,
             attestation_doc=attestation_doc,
             attestation_path=f"{zip_path}!{attestation_name}",
@@ -831,7 +937,9 @@ def _verify_zip(
             public_key_dir=public_key_dir,
             require_attestation=require_attestation,
             trust_embedded_public_key=trust_embedded_public_key,
-            revoked_key_ids={s.strip().lower() for s in (revoked_key_ids or set()) if s.strip() != ""},
+            revoked_key_ids={
+                s.strip().lower() for s in (revoked_key_ids or set()) if s.strip() != ""
+            },
             issues=issues,
         )
         _enforce_attestation_key_match_signature(
@@ -857,7 +965,9 @@ def _verify_zip(
                 )
             )
         else:
-            expected_pack_fingerprint_match = checksums_sha256.lower() == expected_pack_fingerprint
+            expected_pack_fingerprint_match = (
+                checksums_sha256.lower() == expected_pack_fingerprint
+            )
             if not expected_pack_fingerprint_match:
                 issues.append(
                     VerifyIssue(

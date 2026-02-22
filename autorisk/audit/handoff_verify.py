@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import shutil
@@ -12,6 +11,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from autorisk.audit._crypto import sha256_file
+from autorisk.audit.contracts import FinalizeRunRecord
 from autorisk.audit.validate import validate_audit_pack
 from autorisk.audit.verify import verify_audit_pack
 from autorisk.utils.logger import setup_logger
@@ -72,7 +73,9 @@ class AuditHandoffVerifyResult:
             "pack_path": str(self.pack_path),
             "verifier_bundle_zip_path": str(self.verifier_bundle_zip_path),
             "finalize_record_path": str(self.finalize_record_path),
-            "validate_report_path": str(self.validate_report_path) if self.validate_report_path is not None else "",
+            "validate_report_path": str(self.validate_report_path)
+            if self.validate_report_path is not None
+            else "",
             "audit_verify_ok": bool(self.audit_verify_ok),
             "audit_validate_ok": bool(self.audit_validate_ok),
             "attestation_present": bool(self.attestation_present),
@@ -91,15 +94,9 @@ class AuditHandoffVerifyResult:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
 
 
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _parse_checksums(path: Path) -> tuple[list[tuple[str, str]], list[HandoffVerifyIssue]]:
+def _parse_checksums(
+    path: Path,
+) -> tuple[list[tuple[str, str]], list[HandoffVerifyIssue]]:
     entries: list[tuple[str, str]] = []
     issues: list[HandoffVerifyIssue] = []
     text = path.read_text(encoding="utf-8", errors="replace")
@@ -234,7 +231,7 @@ def _safe_extract_zip(
 
 def _append_finalize_record_checks(
     *,
-    record: dict[str, Any],
+    record: FinalizeRunRecord | dict[str, Any],
     verifier_bundle_zip_path: Path,
     checksums_path: Path,
     bundled_validate_path: Path | None,
@@ -242,6 +239,9 @@ def _append_finalize_record_checks(
     issues: list[HandoffVerifyIssue],
 ) -> None:
     path_label = source_label
+    record_map = (
+        record.as_dict() if isinstance(record, FinalizeRunRecord) else dict(record)
+    )
 
     def _cmp(expected_value: str, field_name: str, actual: str, reference: str) -> None:
         expected = str(expected_value).strip().lower()
@@ -265,12 +265,18 @@ def _append_finalize_record_checks(
                 )
             )
 
-    expected_bundle = str(record.get("handoff_anchor_verifier_bundle_zip_sha256", "")).strip()
+    expected_bundle = str(
+        record_map.get("handoff_anchor_verifier_bundle_zip_sha256", "")
+    ).strip()
     if expected_bundle == "":
-        expected_bundle = str(record.get("handoff_verifier_bundle_zip_sha256", "")).strip()
-    expected_checksums = str(record.get("handoff_anchor_checksums_sha256", "")).strip()
+        expected_bundle = str(
+            record_map.get("handoff_verifier_bundle_zip_sha256", "")
+        ).strip()
+    expected_checksums = str(
+        record_map.get("handoff_anchor_checksums_sha256", "")
+    ).strip()
     if expected_checksums == "":
-        expected_checksums = str(record.get("handoff_checksums_sha256", "")).strip()
+        expected_checksums = str(record_map.get("handoff_checksums_sha256", "")).strip()
 
     if expected_bundle == "" or expected_checksums == "":
         issues.append(
@@ -281,11 +287,26 @@ def _append_finalize_record_checks(
             )
         )
 
-    _cmp(expected_bundle, "handoff_anchor_verifier_bundle_zip_sha256", _sha256_file(verifier_bundle_zip_path), "verifier_bundle.zip")
-    _cmp(expected_checksums, "handoff_anchor_checksums_sha256", _sha256_file(checksums_path), HANDOFF_CHECKSUMS_FILENAME)
+    _cmp(
+        expected_bundle,
+        "handoff_anchor_verifier_bundle_zip_sha256",
+        sha256_file(verifier_bundle_zip_path),
+        "verifier_bundle.zip",
+    )
+    _cmp(
+        expected_checksums,
+        "handoff_anchor_checksums_sha256",
+        sha256_file(checksums_path),
+        HANDOFF_CHECKSUMS_FILENAME,
+    )
 
-    validate_report_path = str(record.get("validate_report_path", "")).strip().replace("\\", "/")
-    if validate_report_path != "" and validate_report_path != _EXPECTED_VALIDATE_REPORT_PATH:
+    validate_report_path = (
+        str(record_map.get("validate_report_path", "")).strip().replace("\\", "/")
+    )
+    if (
+        validate_report_path != ""
+        and validate_report_path != _EXPECTED_VALIDATE_REPORT_PATH
+    ):
         issues.append(
             HandoffVerifyIssue(
                 kind="finalize_record_error",
@@ -294,23 +315,29 @@ def _append_finalize_record_checks(
             )
         )
 
-    if bundled_validate_path is not None and bundled_validate_path.exists() and bundled_validate_path.is_file():
+    if (
+        bundled_validate_path is not None
+        and bundled_validate_path.exists()
+        and bundled_validate_path.is_file()
+    ):
         _cmp(
-            str(record.get("validate_report_sha256", "")).strip(),
+            str(record_map.get("validate_report_sha256", "")).strip(),
             "validate_report_sha256",
-            _sha256_file(bundled_validate_path),
+            sha256_file(bundled_validate_path),
             "audit_validate_report.json",
         )
+
 
 def _load_pack_finalize_record(
     *,
     pack_path: Path,
     issues: list[HandoffVerifyIssue],
-) -> dict[str, Any] | None:
+) -> FinalizeRunRecord | None:
     try:
         with zipfile.ZipFile(pack_path, "r") as zf:
             checksum_members = [
-                n for n in zf.namelist()
+                n
+                for n in zf.namelist()
                 if n.endswith("checksums.sha256.txt") and not n.endswith("/")
             ]
             if not checksum_members:
@@ -325,7 +352,11 @@ def _load_pack_finalize_record(
             checksums_name = min(checksum_members, key=lambda n: (n.count("/"), len(n)))
             prefix = checksums_name[: -len("checksums.sha256.txt")].rstrip("/")
             root_prefix = f"{prefix}/" if prefix else ""
-            finalize_name = f"{root_prefix}{PACK_FINALIZE_RECORD_REL}" if root_prefix else PACK_FINALIZE_RECORD_REL
+            finalize_name = (
+                f"{root_prefix}{PACK_FINALIZE_RECORD_REL}"
+                if root_prefix
+                else PACK_FINALIZE_RECORD_REL
+            )
             if finalize_name not in set(zf.namelist()):
                 issues.append(
                     HandoffVerifyIssue(
@@ -335,7 +366,9 @@ def _load_pack_finalize_record(
                     )
                 )
                 return None
-            loaded = json.loads(zf.read(finalize_name).decode("utf-8", errors="replace"))
+            loaded = json.loads(
+                zf.read(finalize_name).decode("utf-8", errors="replace")
+            )
             if not isinstance(loaded, dict):
                 issues.append(
                     HandoffVerifyIssue(
@@ -345,7 +378,17 @@ def _load_pack_finalize_record(
                     )
                 )
                 return None
-            return loaded
+            try:
+                return FinalizeRunRecord.model_validate(loaded)
+            except Exception as exc:
+                issues.append(
+                    HandoffVerifyIssue(
+                        kind="parse_error",
+                        path=f"PACK.zip!{finalize_name}",
+                        detail=f"invalid finalize_record contract: {str(exc)[:200]}",
+                    )
+                )
+                return None
     except Exception as exc:
         issues.append(
             HandoffVerifyIssue(
@@ -359,8 +402,8 @@ def _load_pack_finalize_record(
 
 def _compare_handoff_finalize_copy(
     *,
-    handoff_finalize_record: dict[str, Any] | None,
-    pack_finalize_record: dict[str, Any] | None,
+    handoff_finalize_record: FinalizeRunRecord | None,
+    pack_finalize_record: FinalizeRunRecord | None,
     issues: list[HandoffVerifyIssue],
 ) -> None:
     if handoff_finalize_record is None or pack_finalize_record is None:
@@ -372,8 +415,8 @@ def _compare_handoff_finalize_copy(
         "validate_issues_count",
         "validate_report_sha256",
     ]:
-        left = handoff_finalize_record.get(field)
-        right = pack_finalize_record.get(field)
+        left = getattr(handoff_finalize_record, field, None)
+        right = getattr(pack_finalize_record, field, None)
         if left != right:
             issues.append(
                 HandoffVerifyIssue(
@@ -420,7 +463,9 @@ def verify_audit_handoff(
 
     checksums_path = handoff_dir_path / HANDOFF_CHECKSUMS_FILENAME
     if not checksums_path.exists() or not checksums_path.is_file():
-        raise FileNotFoundError(f"missing {HANDOFF_CHECKSUMS_FILENAME}: {checksums_path}")
+        raise FileNotFoundError(
+            f"missing {HANDOFF_CHECKSUMS_FILENAME}: {checksums_path}"
+        )
 
     issues: list[HandoffVerifyIssue] = []
     entries, parse_issues = _parse_checksums(checksums_path)
@@ -450,9 +495,11 @@ def verify_audit_handoff(
             )
             continue
         try:
-            actual_sha = _sha256_file(target)
+            actual_sha = sha256_file(target)
         except Exception as exc:
-            issues.append(HandoffVerifyIssue(kind="io_error", path=rel, detail=str(exc)[:200]))
+            issues.append(
+                HandoffVerifyIssue(kind="io_error", path=rel, detail=str(exc)[:200])
+            )
             continue
         verified_files += 1
         if actual_sha.lower() != expected_sha.lower():
@@ -467,18 +514,36 @@ def verify_audit_handoff(
 
     pack_path = handoff_dir_path / "PACK.zip"
     if not pack_path.exists() or not pack_path.is_file():
-        issues.append(HandoffVerifyIssue(kind="missing_file", path="PACK.zip", detail="required file is missing"))
+        issues.append(
+            HandoffVerifyIssue(
+                kind="missing_file", path="PACK.zip", detail="required file is missing"
+            )
+        )
 
     verifier_bundle_zip_path = handoff_dir_path / "verifier_bundle.zip"
     if not verifier_bundle_zip_path.exists() or not verifier_bundle_zip_path.is_file():
-        issues.append(HandoffVerifyIssue(kind="missing_file", path="verifier_bundle.zip", detail="required file is missing"))
+        issues.append(
+            HandoffVerifyIssue(
+                kind="missing_file",
+                path="verifier_bundle.zip",
+                detail="required file is missing",
+            )
+        )
 
     finalize_record_path = handoff_dir_path / "finalize_record.json"
     if not finalize_record_path.exists() or not finalize_record_path.is_file():
-        issues.append(HandoffVerifyIssue(kind="missing_file", path="finalize_record.json", detail="required file is missing"))
+        issues.append(
+            HandoffVerifyIssue(
+                kind="missing_file",
+                path="finalize_record.json",
+                detail="required file is missing",
+            )
+        )
 
     bundled_validate_path = handoff_dir_path / "audit_validate_report.json"
-    if compare_bundled_validate_report and (not bundled_validate_path.exists() or not bundled_validate_path.is_file()):
+    if compare_bundled_validate_report and (
+        not bundled_validate_path.exists() or not bundled_validate_path.is_file()
+    ):
         issues.append(
             HandoffVerifyIssue(
                 kind="missing_file",
@@ -497,14 +562,16 @@ def verify_audit_handoff(
     expected_pack_fingerprint = str(expect_pack_fingerprint or "").strip().lower()
     expected_pack_fingerprint_match: bool | None = None
     bundled_validate_report_match: bool | None = None
-    finalize_record_obj: dict[str, Any] | None = None
-    pack_finalize_record_obj: dict[str, Any] | None = None
+    finalize_record_obj: FinalizeRunRecord | None = None
+    pack_finalize_record_obj: FinalizeRunRecord | None = None
 
     if finalize_record_path.exists() and finalize_record_path.is_file():
         try:
-            loaded = json.loads(finalize_record_path.read_text(encoding="utf-8", errors="replace"))
+            loaded = json.loads(
+                finalize_record_path.read_text(encoding="utf-8", errors="replace")
+            )
             if isinstance(loaded, dict):
-                finalize_record_obj = loaded
+                finalize_record_obj = FinalizeRunRecord.model_validate(loaded)
             else:
                 issues.append(
                     HandoffVerifyIssue(
@@ -518,7 +585,7 @@ def verify_audit_handoff(
                 HandoffVerifyIssue(
                     kind="parse_error",
                     path="finalize_record.json",
-                    detail=str(exc)[:200],
+                    detail=f"invalid finalize_record contract: {str(exc)[:200]}",
                 )
             )
 
@@ -539,7 +606,9 @@ def verify_audit_handoff(
                     pack_path=pack_path,
                     verifier_bundle_zip_path=verifier_bundle_zip_path,
                     finalize_record_path=finalize_record_path,
-                    validate_report_path=bundled_validate_path if bundled_validate_path.exists() else None,
+                    validate_report_path=bundled_validate_path
+                    if bundled_validate_path.exists()
+                    else None,
                     audit_verify_ok=audit_verify_ok,
                     audit_validate_ok=audit_validate_ok,
                     attestation_present=attestation_present,
@@ -556,12 +625,24 @@ def verify_audit_handoff(
             revocation_file = bundle_root / "revoked_key_ids.txt"
             revoked = _load_revoked_key_ids(revocation_file)
 
-            if require_public_key and (not trusted_keys_dir.exists() or not trusted_keys_dir.is_dir()):
-                issues.append(HandoffVerifyIssue(kind="missing_file", path=str(trusted_keys_dir), detail="missing trusted key directory"))
+            if require_public_key and (
+                not trusted_keys_dir.exists() or not trusted_keys_dir.is_dir()
+            ):
+                issues.append(
+                    HandoffVerifyIssue(
+                        kind="missing_file",
+                        path=str(trusted_keys_dir),
+                        detail="missing trusted key directory",
+                    )
+                )
 
             verify_public_key_dir = (
                 trusted_keys_dir
-                if (require_public_key and trusted_keys_dir.exists() and trusted_keys_dir.is_dir())
+                if (
+                    require_public_key
+                    and trusted_keys_dir.exists()
+                    and trusted_keys_dir.is_dir()
+                )
                 else None
             )
 
@@ -620,12 +701,22 @@ def verify_audit_handoff(
                     )
                 )
 
-            if compare_bundled_validate_report and bundled_validate_path.exists() and bundled_validate_path.is_file():
+            if (
+                compare_bundled_validate_report
+                and bundled_validate_path.exists()
+                and bundled_validate_path.is_file()
+            ):
                 try:
-                    bundled_obj = json.loads(bundled_validate_path.read_text(encoding="utf-8"))
+                    bundled_obj = json.loads(
+                        bundled_validate_path.read_text(encoding="utf-8")
+                    )
                     bundled_ok = bool(bundled_obj.get("ok", False))
                     bundled_issues = bundled_obj.get("issues", [])
-                    bundled_issue_count = len(bundled_issues) if isinstance(bundled_issues, list) else None
+                    bundled_issue_count = (
+                        len(bundled_issues)
+                        if isinstance(bundled_issues, list)
+                        else None
+                    )
                     bundled_validate_report_match = (
                         bundled_ok == validate_res.ok
                         and bundled_issue_count == len(validate_res.issues)
@@ -661,11 +752,17 @@ def verify_audit_handoff(
             record=pack_finalize_record_obj,
             verifier_bundle_zip_path=verifier_bundle_zip_path,
             checksums_path=checksums_path,
-            bundled_validate_path=bundled_validate_path if bundled_validate_path.exists() else None,
+            bundled_validate_path=bundled_validate_path
+            if bundled_validate_path.exists()
+            else None,
             source_label=f"PACK.zip!{PACK_FINALIZE_RECORD_REL}",
             issues=issues,
         )
-    elif pack_finalize_record_obj is not None and require_attestation and attestation_verified is not True:
+    elif (
+        pack_finalize_record_obj is not None
+        and require_attestation
+        and attestation_verified is not True
+    ):
         issues.append(
             HandoffVerifyIssue(
                 kind="finalize_record_error",
@@ -682,7 +779,9 @@ def verify_audit_handoff(
         pack_path=pack_path,
         verifier_bundle_zip_path=verifier_bundle_zip_path,
         finalize_record_path=finalize_record_path,
-        validate_report_path=bundled_validate_path if bundled_validate_path.exists() else None,
+        validate_report_path=bundled_validate_path
+        if bundled_validate_path.exists()
+        else None,
         audit_verify_ok=audit_verify_ok,
         audit_validate_ok=audit_validate_ok,
         attestation_present=attestation_present,

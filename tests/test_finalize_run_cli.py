@@ -57,7 +57,9 @@ def _prepare_review_log(run_dir: Path) -> None:
     )
 
 
-def test_finalize_run_audit_grade_accepts_keyring_anchor(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_finalize_run_audit_grade_accepts_keyring_anchor(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     _prepare_review_log(sample_run_dir)
     private_key, active_public_key = _write_keypair(tmp_path, prefix="active_")
     _, old_public_key = _write_keypair(tmp_path, prefix="old_")
@@ -139,7 +141,9 @@ def test_finalize_run_audit_grade_accepts_keyring_anchor(sample_run_dir: Path, t
     assert (handoff_dir / "audit_validate_report.json").exists()
     assert (handoff_dir / "HANDOFF.md").exists()
     assert (handoff_dir / "handoff_checksums.sha256.txt").exists()
-    handoff_finalize_record = json.loads((handoff_dir / "finalize_record.json").read_text(encoding="utf-8"))
+    handoff_finalize_record = json.loads(
+        (handoff_dir / "finalize_record.json").read_text(encoding="utf-8")
+    )
     for key in [
         "validate_ok",
         "validate_issues_count",
@@ -159,16 +163,24 @@ def test_finalize_run_audit_grade_accepts_keyring_anchor(sample_run_dir: Path, t
         checksums_text = zf.read("checksums.sha256.txt").decode("utf-8")
         assert "  run_artifacts/run_summary.json" in checksums_text
         assert "  run_artifacts/submission_metrics.json" in checksums_text
-        packed_finalize = json.loads(zf.read("run_artifacts/finalize_record.json").decode("utf-8"))
+        packed_finalize = json.loads(
+            zf.read("run_artifacts/finalize_record.json").decode("utf-8")
+        )
 
     # PACK-internal finalize record keeps handoff anchors and avoids circular handoff hashes.
-    assert _HEX64.fullmatch(str(packed_finalize.get("handoff_anchor_checksums_sha256", "")))
-    assert _HEX64.fullmatch(str(packed_finalize.get("handoff_anchor_verifier_bundle_zip_sha256", "")))
+    assert _HEX64.fullmatch(
+        str(packed_finalize.get("handoff_anchor_checksums_sha256", ""))
+    )
+    assert _HEX64.fullmatch(
+        str(packed_finalize.get("handoff_anchor_verifier_bundle_zip_sha256", ""))
+    )
     assert str(packed_finalize.get("handoff_pack_zip_sha256", "")) == ""
     assert str(packed_finalize.get("handoff_checksums_sha256", "")) == ""
 
 
-def test_finalize_run_audit_grade_requires_trusted_anchor(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_finalize_run_audit_grade_requires_trusted_anchor(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     _prepare_review_log(sample_run_dir)
     private_key, _ = _write_keypair(tmp_path)
 
@@ -189,11 +201,16 @@ def test_finalize_run_audit_grade_requires_trusted_anchor(sample_run_dir: Path, 
     )
 
     assert result.exit_code != 0
-    assert "--audit-grade requires --sign-public-key or --sign-public-key-dir" in result.output
+    assert (
+        "--audit-grade requires --sign-public-key or --sign-public-key-dir"
+        in result.output
+    )
     assert not any(sample_run_dir.glob("audit_pack_*"))
 
 
-def test_finalize_run_audit_grade_requires_sign_private_key(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_finalize_run_audit_grade_requires_sign_private_key(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     _prepare_review_log(sample_run_dir)
     _, public_key = _write_keypair(tmp_path, prefix="anchor_")
     keyring_dir = tmp_path / "trusted_keys_only_public"
