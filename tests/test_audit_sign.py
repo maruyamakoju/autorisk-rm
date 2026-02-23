@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from omegaconf import OmegaConf
 
+from autorisk.audit.attestation import attest_audit_pack
 from autorisk.audit.pack import build_audit_pack
 from autorisk.audit.sign import sign_audit_pack
 from autorisk.audit.verify import verify_audit_pack
@@ -100,7 +102,9 @@ def _write_finalize_artifacts(run_dir: Path) -> None:
     )
 
 
-def test_audit_sign_and_verify_for_directory(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_sign_and_verify_for_directory(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     private_key, public_key = _write_ed25519_keypair(tmp_path)
     pack_res = build_audit_pack(
         run_dir=sample_run_dir,
@@ -154,7 +158,9 @@ def test_audit_sign_and_verify_for_zip(sample_run_dir: Path, tmp_path: Path) -> 
     assert verify_no_trust.signature_present is True
     assert verify_no_trust.signature_verified is None
 
-    verify_embedded = verify_audit_pack(pack_res.zip_path, trust_embedded_public_key=True)
+    verify_embedded = verify_audit_pack(
+        pack_res.zip_path, trust_embedded_public_key=True
+    )
     assert verify_embedded.ok is True
     assert verify_embedded.signature_present is True
     assert verify_embedded.signature_verified is True
@@ -171,7 +177,9 @@ def test_audit_sign_and_verify_for_zip(sample_run_dir: Path, tmp_path: Path) -> 
     assert verify_ok.signature_verified is True
 
 
-def test_audit_verify_uses_keyring_directory(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_verify_uses_keyring_directory(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     private_key, public_key = _write_ed25519_keypair(tmp_path, prefix="active_")
     _, old_public_key = _write_ed25519_keypair(tmp_path, prefix="old_")
     keyring_dir = tmp_path / "trusted_keys"
@@ -202,7 +210,9 @@ def test_audit_verify_uses_keyring_directory(sample_run_dir: Path, tmp_path: Pat
     assert verify_res.signature_key_source.endswith("active.pem")
 
 
-def test_audit_verify_fails_for_revoked_key(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_verify_fails_for_revoked_key(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     private_key, public_key = _write_ed25519_keypair(tmp_path)
     pack_res = build_audit_pack(
         run_dir=sample_run_dir,
@@ -223,10 +233,14 @@ def test_audit_verify_fails_for_revoked_key(sample_run_dir: Path, tmp_path: Path
         revoked_key_ids={sign_res.key_id},
     )
     assert verify_res.ok is False
-    assert any(i.kind == "signature_error" and "revoked" in i.detail for i in verify_res.issues)
+    assert any(
+        i.kind == "signature_error" and "revoked" in i.detail for i in verify_res.issues
+    )
 
 
-def test_audit_sign_supports_encrypted_private_key(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_sign_supports_encrypted_private_key(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     password = "very-secret-passphrase"
     private_key, public_key = _write_ed25519_keypair(tmp_path, password=password)
     pack_res = build_audit_pack(
@@ -251,7 +265,51 @@ def test_audit_sign_supports_encrypted_private_key(sample_run_dir: Path, tmp_pat
     assert verify_res.signature_verified is True
 
 
-def test_audit_verify_fails_with_wrong_public_key(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_sign_rejects_mismatched_public_key(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
+    private_key, _ = _write_ed25519_keypair(tmp_path / "signing")
+    _, wrong_public_key = _write_ed25519_keypair(tmp_path / "wrong")
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=False,
+    )
+
+    with pytest.raises(ValueError, match="does not match the private key"):
+        sign_audit_pack(
+            pack_res.output_dir,
+            private_key_path=private_key,
+            public_key_path=wrong_public_key,
+        )
+
+
+def test_audit_attest_rejects_mismatched_public_key(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
+    _write_finalize_artifacts(sample_run_dir)
+    private_key, _ = _write_ed25519_keypair(tmp_path / "signing")
+    _, wrong_public_key = _write_ed25519_keypair(tmp_path / "wrong")
+    pack_res = build_audit_pack(
+        run_dir=sample_run_dir,
+        cfg=_sample_cfg(),
+        include_clips=False,
+        create_zip=True,
+    )
+    assert pack_res.zip_path is not None
+
+    with pytest.raises(ValueError, match="does not match the private key"):
+        attest_audit_pack(
+            pack_res.zip_path,
+            private_key_path=private_key,
+            public_key_path=wrong_public_key,
+        )
+
+
+def test_audit_verify_fails_with_wrong_public_key(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     private_key, public_key = _write_ed25519_keypair(tmp_path)
     _, wrong_public_key = _write_ed25519_keypair(tmp_path / "wrong")
     pack_res = build_audit_pack(
@@ -276,7 +334,9 @@ def test_audit_verify_fails_with_wrong_public_key(sample_run_dir: Path, tmp_path
     assert any(i.kind == "signature_error" for i in verify_wrong.issues)
 
 
-def test_audit_verify_fails_on_invalid_signature_json(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_verify_fails_on_invalid_signature_json(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     private_key, public_key = _write_ed25519_keypair(tmp_path)
     pack_res = build_audit_pack(
         run_dir=sample_run_dir,
@@ -293,7 +353,9 @@ def test_audit_verify_fails_on_invalid_signature_json(sample_run_dir: Path, tmp_
     signature_path = pack_res.output_dir / "signature.json"
     signature_obj = json.loads(signature_path.read_text(encoding="utf-8"))
     signature_obj["signature"] = "!!!not-base64!!!"
-    signature_path.write_text(json.dumps(signature_obj, ensure_ascii=False), encoding="utf-8")
+    signature_path.write_text(
+        json.dumps(signature_obj, ensure_ascii=False), encoding="utf-8"
+    )
 
     verify_res = verify_audit_pack(
         pack_res.output_dir,
@@ -305,7 +367,9 @@ def test_audit_verify_fails_on_invalid_signature_json(sample_run_dir: Path, tmp_
     assert any(i.kind == "signature_error" for i in verify_res.issues)
 
 
-def test_audit_verify_require_signature_and_public_key_flags(sample_run_dir: Path) -> None:
+def test_audit_verify_require_signature_and_public_key_flags(
+    sample_run_dir: Path,
+) -> None:
     pack_res = build_audit_pack(
         run_dir=sample_run_dir,
         cfg=_sample_cfg(),
@@ -326,7 +390,9 @@ def test_audit_verify_require_signature_and_public_key_flags(sample_run_dir: Pat
     assert any(i.kind == "signature_error" for i in require_pub_without_key.issues)
 
 
-def test_audit_attest_cli_generates_verifiable_attestation(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_attest_cli_generates_verifiable_attestation(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     _write_finalize_artifacts(sample_run_dir)
     private_key, public_key = _write_ed25519_keypair(tmp_path)
     pack_res = build_audit_pack(

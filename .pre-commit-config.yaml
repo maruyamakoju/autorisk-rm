@@ -1,0 +1,57 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check-audit-cli
+        name: ruff check (audit + cli scope)
+        entry: >
+          ruff check
+          autorisk/audit/sign.py
+          autorisk/audit/attestation.py
+          autorisk/audit/verify.py
+          autorisk/audit/handoff_verify.py
+          autorisk/audit/contracts.py
+          autorisk/services/audit_service.py
+          autorisk/services/audit_verify_service.py
+          autorisk/cli_commands
+          tests/test_audit_sign.py
+          tests/test_audit_verify.py
+          tests/test_audit_handoff_verify.py
+          tests/test_finalize_run_cli.py
+          tests/test_cli_registry.py
+          tests/test_audit_contracts.py
+        language: system
+        pass_filenames: false
+      - id: ruff-format-check-audit-cli
+        name: ruff format --check (audit + cli scope)
+        entry: >
+          ruff format --check
+          autorisk/audit/sign.py
+          autorisk/audit/attestation.py
+          autorisk/audit/verify.py
+          autorisk/audit/handoff_verify.py
+          autorisk/audit/contracts.py
+          autorisk/services/audit_service.py
+          autorisk/services/audit_verify_service.py
+          autorisk/cli_commands
+          tests/test_audit_sign.py
+          tests/test_audit_verify.py
+          tests/test_audit_handoff_verify.py
+          tests/test_finalize_run_cli.py
+          tests/test_cli_registry.py
+          tests/test_audit_contracts.py
+        language: system
+        pass_filenames: false
+      - id: mypy-audit-cli
+        name: mypy --follow-imports=skip (audit + cli scope)
+        entry: >
+          mypy --follow-imports=skip
+          autorisk/audit/sign.py
+          autorisk/audit/attestation.py
+          autorisk/audit/verify.py
+          autorisk/audit/handoff_verify.py
+          autorisk/audit/contracts.py
+          autorisk/services/audit_service.py
+          autorisk/services/audit_verify_service.py
+          autorisk/cli_commands
+        language: system
+        pass_filenames: false

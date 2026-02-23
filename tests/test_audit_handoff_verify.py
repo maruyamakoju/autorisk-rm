@@ -97,9 +97,10 @@ def _rewrite_zip_member(
     with tempfile.TemporaryDirectory(prefix="autorisk-test-zip-rewrite-") as tmp_dir:
         tmp_zip = Path(tmp_dir) / zip_path.name
         found = False
-        with zipfile.ZipFile(zip_path, "r") as src, zipfile.ZipFile(
-            tmp_zip, "w", compression=zipfile.ZIP_DEFLATED
-        ) as dst:
+        with (
+            zipfile.ZipFile(zip_path, "r") as src,
+            zipfile.ZipFile(tmp_zip, "w", compression=zipfile.ZIP_DEFLATED) as dst,
+        ):
             for info in src.infolist():
                 if info.is_dir():
                     dst.writestr(info, b"")
@@ -115,7 +116,9 @@ def _rewrite_zip_member(
         tmp_zip.replace(zip_path)
 
 
-def _rewrite_handoff_checksums_entry(handoff_dir: Path, *, rel_path: str, sha256_hex: str) -> None:
+def _rewrite_handoff_checksums_entry(
+    handoff_dir: Path, *, rel_path: str, sha256_hex: str
+) -> None:
     checksums_path = handoff_dir / "handoff_checksums.sha256.txt"
     lines = checksums_path.read_text(encoding="utf-8").splitlines()
     target = rel_path.replace("\\", "/")
@@ -145,7 +148,9 @@ def test_verify_audit_handoff_happy_path(sample_run_dir: Path, tmp_path: Path) -
     assert result.issues == []
 
 
-def test_audit_handoff_verify_cli_detects_tampered_handoff(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_handoff_verify_cli_detects_tampered_handoff(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
 
     with (handoff_dir / "verifier_bundle.zip").open("ab") as f:
@@ -173,54 +178,71 @@ def test_audit_handoff_verify_cli_detects_tampered_handoff(sample_run_dir: Path,
         (issue.get("kind") == "mismatch" and issue.get("path") == "verifier_bundle.zip")
         or (
             issue.get("kind") == "finalize_record_error"
-            and "handoff_anchor_verifier_bundle_zip_sha256 mismatch" in issue.get("detail", "")
+            and "handoff_anchor_verifier_bundle_zip_sha256 mismatch"
+            in issue.get("detail", "")
         )
         for issue in payload.get("issues", [])
     )
 
 
-def test_verify_audit_handoff_detects_finalize_record_hash_mismatch(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_verify_audit_handoff_detects_finalize_record_hash_mismatch(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
     finalize_path = handoff_dir / "finalize_record.json"
     payload = json.loads(finalize_path.read_text(encoding="utf-8"))
     payload["validate_report_sha256"] = "0" * 64
-    finalize_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    finalize_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     result = verify_audit_handoff(handoff_dir)
     assert result.ok is False
     assert any(
-        issue.kind == "finalize_record_error" and "handoff finalize copy diverges" in issue.detail
+        issue.kind == "finalize_record_error"
+        and "handoff finalize copy diverges" in issue.detail
         for issue in result.issues
     )
 
 
-def test_verify_audit_handoff_detects_validate_report_tamper(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_verify_audit_handoff_detects_validate_report_tamper(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
     validate_path = handoff_dir / "audit_validate_report.json"
     report = json.loads(validate_path.read_text(encoding="utf-8"))
     report["ok"] = False
-    validate_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    validate_path.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     result = verify_audit_handoff(handoff_dir)
     assert result.ok is False
     assert any(
         issue.kind in {"finalize_record_error", "report_mismatch"}
         and (
-            issue.path in {"audit_validate_report.json", "PACK.zip!run_artifacts/finalize_record.json"}
+            issue.path
+            in {
+                "audit_validate_report.json",
+                "PACK.zip!run_artifacts/finalize_record.json",
+            }
             or issue.path.startswith("PACK.zip!")
         )
         for issue in result.issues
     )
 
 
-def test_verify_audit_handoff_rejects_zip_slip_entries(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_verify_audit_handoff_rejects_zip_slip_entries(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
     bundle_zip = handoff_dir / "verifier_bundle.zip"
     rewritten = tmp_path / "bundle_with_slip.zip"
 
-    with zipfile.ZipFile(bundle_zip, "r") as src, zipfile.ZipFile(
-        rewritten, "w", compression=zipfile.ZIP_DEFLATED
-    ) as dst:
+    with (
+        zipfile.ZipFile(bundle_zip, "r") as src,
+        zipfile.ZipFile(rewritten, "w", compression=zipfile.ZIP_DEFLATED) as dst,
+    ):
         for info in src.infolist():
             if info.is_dir():
                 continue
@@ -234,7 +256,9 @@ def test_verify_audit_handoff_rejects_zip_slip_entries(sample_run_dir: Path, tmp
     assert any(issue.kind == "security_error" for issue in result.issues)
 
 
-def test_verify_audit_handoff_detects_pack_finalize_record_tamper(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_verify_audit_handoff_detects_pack_finalize_record_tamper(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
     pack_zip = handoff_dir / "PACK.zip"
 
@@ -259,7 +283,9 @@ def test_verify_audit_handoff_detects_pack_finalize_record_tamper(sample_run_dir
     )
 
 
-def test_verify_audit_handoff_detects_attestation_signature_tamper(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_verify_audit_handoff_detects_attestation_signature_tamper(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
     pack_zip = handoff_dir / "PACK.zip"
 
@@ -279,12 +305,17 @@ def test_verify_audit_handoff_detects_attestation_signature_tamper(sample_run_di
     assert any(
         issue.kind == "audit_verify_error"
         and "attestation_error" in issue.detail
-        and ("invalid signature" in issue.detail or "invalid base64 signature" in issue.detail)
+        and (
+            "invalid signature" in issue.detail
+            or "invalid base64 signature" in issue.detail
+        )
         for issue in result.issues
     )
 
 
-def test_verify_audit_handoff_requires_attestation(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_verify_audit_handoff_requires_attestation(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
     pack_zip = handoff_dir / "PACK.zip"
 
@@ -304,7 +335,9 @@ def test_verify_audit_handoff_requires_attestation(sample_run_dir: Path, tmp_pat
     )
 
 
-def test_verify_audit_handoff_rejects_self_consistent_handoff_finalize_tamper(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_verify_audit_handoff_rejects_self_consistent_handoff_finalize_tamper(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
     checksums_path = handoff_dir / "handoff_checksums.sha256.txt"
     checksums_path.write_text(
@@ -315,7 +348,9 @@ def test_verify_audit_handoff_rejects_self_consistent_handoff_finalize_tamper(sa
     handoff_finalize_path = handoff_dir / "finalize_record.json"
     handoff_finalize = json.loads(handoff_finalize_path.read_text(encoding="utf-8"))
     handoff_finalize["handoff_checksums_sha256"] = new_checksums_sha
-    handoff_finalize_path.write_text(json.dumps(handoff_finalize, ensure_ascii=False, indent=2), encoding="utf-8")
+    handoff_finalize_path.write_text(
+        json.dumps(handoff_finalize, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     result = verify_audit_handoff(handoff_dir)
     assert result.ok is False
@@ -326,7 +361,9 @@ def test_verify_audit_handoff_rejects_self_consistent_handoff_finalize_tamper(sa
     )
 
 
-def test_verify_audit_handoff_rejects_pack_zip_row_in_handoff_checksums(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_verify_audit_handoff_rejects_pack_zip_row_in_handoff_checksums(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
     checksums_path = handoff_dir / "handoff_checksums.sha256.txt"
     pack_sha = hashlib.sha256((handoff_dir / "PACK.zip").read_bytes()).hexdigest()
@@ -380,7 +417,9 @@ def test_audit_handoff_verify_cli_profile_audit_grade_fails_without_trusted_key(
     )
 
 
-def test_audit_handoff_verify_profile_default_is_diagnostics_mode(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_handoff_verify_profile_default_is_diagnostics_mode(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
     bundle_zip = handoff_dir / "verifier_bundle.zip"
     _rewrite_zip_member(
@@ -427,7 +466,9 @@ def test_audit_handoff_verify_profile_default_is_diagnostics_mode(sample_run_dir
     assert audit_res.exit_code == 2
 
 
-def test_audit_handoff_verify_expect_pack_fingerprint_mismatch(sample_run_dir: Path, tmp_path: Path) -> None:
+def test_audit_handoff_verify_expect_pack_fingerprint_mismatch(
+    sample_run_dir: Path, tmp_path: Path
+) -> None:
     handoff_dir = _build_audit_grade_handoff(sample_run_dir, tmp_path)
     pack_zip = handoff_dir / "PACK.zip"
     mismatch = "0" * 64

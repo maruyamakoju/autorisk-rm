@@ -23,6 +23,7 @@ from typing import Any
 from omegaconf import OmegaConf
 
 from autorisk import __version__ as _PACKAGE_VERSION
+from autorisk.audit._crypto import sha256_file as _sha256_file_common
 from autorisk.cosmos.infer import _parse_markdown_response, _repair_truncated_json
 from autorisk.cosmos.prompt import (
     SUPPLEMENT_SYSTEM_PROMPT,
@@ -92,11 +93,7 @@ def _sha256_text(text: str) -> str:
 
 
 def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    return _sha256_file_common(path)
 
 
 def _read_json(path: Path) -> Any:

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib.metadata
 import platform
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from autorisk.audit._crypto import sha256_file
 
 @dataclass
 class VerifierBundleResult:
@@ -18,16 +18,6 @@ class VerifierBundleResult:
     revocation_path: Path
     key_files: list[Path]
     revoked_key_ids: list[str]
-
-
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
 def _normalized_revoked_ids(
     *,
     revoked_key_ids: set[str] | None,
@@ -128,7 +118,7 @@ def build_verifier_bundle(
                 "",
                 "Notes:",
                 f"- trusted key files: {len(key_files)}",
-                f"- revocation file sha256: {_sha256_file(revocation_path)}",
+                f"- revocation file sha256: {sha256_file(revocation_path)}",
                 f"- autorisk version: {_autorisk_version()}",
                 f"- python version: {sys.version.splitlines()[0]}",
                 f"- platform: {platform.platform()}",
