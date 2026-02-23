@@ -57,6 +57,19 @@ streamlit run autorisk/dashboard/app.py
 
 See `DATA_SOURCES.md` for source policy, rights notes, and redistribution rules.
 
+## Developer Quality Gates
+
+```bash
+# Install dev tooling
+pip install -e ".[dev]"
+
+# Enable local commit-time gates (same scoped checks as CI)
+pre-commit install
+
+# Run manually
+pre-commit run --all-files
+```
+
 ## Judge One-Command (Audit Grade)
 
 Use one command to produce handoff artifacts, sign, verify, and print pack fingerprint.

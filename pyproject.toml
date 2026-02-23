@@ -31,6 +31,7 @@ dev = [
     "yt-dlp>=2024.1",
     "ruff>=0.9",
     "mypy>=1.12",
+    "pre-commit>=3.8",
 ]
 dashboard = [
     "streamlit>=1.32",
