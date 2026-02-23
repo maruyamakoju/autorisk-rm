@@ -63,6 +63,7 @@ jobs:
             autorisk/audit/verify.py \
             autorisk/audit/handoff_verify.py \
             autorisk/audit/contracts.py \
+            autorisk/services/audit_service.py \
             autorisk/cli_commands \
             tests/test_audit_sign.py \
             tests/test_audit_verify.py \
@@ -76,6 +77,7 @@ jobs:
             autorisk/audit/verify.py \
             autorisk/audit/handoff_verify.py \
             autorisk/audit/contracts.py \
+            autorisk/services/audit_service.py \
             autorisk/cli_commands \
             tests/test_audit_sign.py \
             tests/test_audit_verify.py \
@@ -89,6 +91,7 @@ jobs:
             autorisk/audit/verify.py \
             autorisk/audit/handoff_verify.py \
             autorisk/audit/contracts.py \
+            autorisk/services/audit_service.py \
             autorisk/cli_commands
 
       - name: Unit Tests (Source Tree)
