@@ -226,6 +226,12 @@ def _render_pipeline_diagram() -> None:
             <div style="font-weight:700; font-size:14px; color:#FEE2E2;">B5: Analysis</div>
             <div style="font-size:11px; color:#FECACA; margin-top:4px;">TTC + Grounding + Saliency</div>
         </div>
+        <div style="font-size:24px; color:#6B7280;">&#10132;</div>
+        <div style="background:linear-gradient(135deg,#0C4A6E,#0EA5E9); border-radius:12px; padding:16px 20px; text-align:center; min-width:140px;">
+            <div style="font-size:24px;">&#127902;</div>
+            <div style="font-weight:700; font-size:14px; color:#E0F2FE;">Predict 2</div>
+            <div style="font-size:11px; color:#BAE6FD; margin-top:4px;">Future Video Generation</div>
+        </div>
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)

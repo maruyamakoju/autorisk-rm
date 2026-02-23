@@ -79,6 +79,11 @@ cosmos:
     rounds: 3                 # Number of voting rounds (temperatures to try)
     temperatures: [0.3, 0.6, 0.9]  # Temperatures for voting rounds
 
+  predict:
+    enabled: false            # Enable Cosmos Predict 2 future generation
+    model_name: "nvidia/Cosmos-Predict2-2B-Video2World"
+    severity_filter: ["HIGH", "MEDIUM"]  # Only predict for these severities
+
 # --- Ranking (B3) ---
 ranking:
   severity_order: ["HIGH", "MEDIUM", "LOW", "NONE"]

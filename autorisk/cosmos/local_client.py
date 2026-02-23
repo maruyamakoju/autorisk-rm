@@ -173,6 +173,21 @@ class CosmosLocalClient:
 
         return output_text[0]
 
+    def unload(self) -> None:
+        """Release model and processor, free VRAM."""
+        import gc
+
+        if self._model is not None:
+            del self._model
+            self._model = None
+        if self._processor is not None:
+            del self._processor
+            self._processor = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        log.info("Cosmos Reason 2 model unloaded.")
+
     @staticmethod
     def encode_video_base64(video_path: str | Path) -> str:
         """No-op for API compatibility."""

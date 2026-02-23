@@ -140,6 +140,68 @@ def render(data: dict) -> None:
 
     st.divider()
 
+    # --- Enhanced Correction Before/After ---
+    correction_report = data.get("correction_report")
+    if correction_report:
+        st.subheader("Signal-Based Correction (Before / After)")
+
+        before_acc = eval_rep.get("accuracy", 0)
+        after_acc = correction_report.get("accuracy", 0)
+        before_f1 = eval_rep.get("macro_f1", 0)
+        after_f1 = correction_report.get("macro_f1", 0)
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Accuracy (Before)", f"{before_acc:.1%}")
+        c2.metric("Accuracy (After)", f"{after_acc:.1%}", delta=f"+{after_acc - before_acc:.1%}")
+        c3.metric("Macro-F1 (Before)", f"{before_f1:.3f}")
+        c4.metric("Macro-F1 (After)", f"{after_f1:.3f}", delta=f"+{after_f1 - before_f1:.3f}")
+
+        # Per-class recall comparison
+        corr_per_class = correction_report.get("per_class", {})
+        orig_per_class = analysis.get("per_class_metrics", [])
+        if corr_per_class:
+            fig_corr = go.Figure()
+            sev_labels = list(corr_per_class.keys())
+
+            # Before recall (from original eval)
+            before_recalls = []
+            for sev in sev_labels:
+                orig = next((m for m in orig_per_class if m.get("label") == sev), None)
+                before_recalls.append(orig["recall"] if orig else 0)
+
+            after_recalls = [corr_per_class[s].get("recall", 0) for s in sev_labels]
+
+            fig_corr.add_trace(go.Bar(
+                name="Before Correction",
+                x=sev_labels,
+                y=before_recalls,
+                marker_color="#6B7280",
+                text=[f"{v:.0%}" for v in before_recalls],
+                textposition="outside",
+            ))
+            fig_corr.add_trace(go.Bar(
+                name="After Correction",
+                x=sev_labels,
+                y=after_recalls,
+                marker_color="#10B981",
+                text=[f"{v:.0%}" for v in after_recalls],
+                textposition="outside",
+            ))
+            fig_corr.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                barmode="group",
+                height=300,
+                margin=dict(t=30, b=40, l=40, r=20),
+                legend=dict(orientation="h", y=1.12),
+                yaxis_title="Recall",
+                yaxis_range=[0, 1.15],
+            )
+            st.plotly_chart(fig_corr, width="stretch")
+
+        st.divider()
+
     # --- Error Details Table ---
     st.subheader("Misclassification Details")
     failures = eval_rep.get("failures", [])

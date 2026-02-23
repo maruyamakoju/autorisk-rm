@@ -76,6 +76,27 @@ def render(data: dict) -> None:
         else:
             st.warning(f"Video file not found: {clip_path}")
 
+        # Predict 2 prediction video (side by side with original)
+        predict_results = data.get("predict_results")
+        if predict_results:
+            predict_lookup = {
+                Path(str(p.get("clip_name", ""))).name: p
+                for p in predict_results if isinstance(p, dict)
+            }
+            pred_data = predict_lookup.get(clip_name)
+            if pred_data and pred_data.get("output_path"):
+                pred_path = Path(pred_data["output_path"])
+                if pred_path.exists():
+                    st.markdown("**Cosmos Predict 2: What Happens Next?**")
+                    p_col1, p_col2 = st.columns(2)
+                    with p_col1:
+                        st.caption("Original Clip")
+                        if clip_path.exists():
+                            st.video(str(clip_path))
+                    with p_col2:
+                        st.caption("Predicted Future (5s)")
+                        st.video(str(pred_path))
+
         # Saliency heatmap
         sal_data = saliency_images.get(clip_name, {})
         if sal_data:

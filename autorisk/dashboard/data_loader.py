@@ -122,6 +122,15 @@ def load_data(run_dir: str) -> dict:
     data["saliency_results"] = _load_json_with_warning("saliency_results.json", [])
     data["saliency_images"] = _load_json_with_warning("saliency_images.json", {})
 
+    # Enhanced correction results
+    correction_dir = run.parent / "enhanced_correction"
+    data["correction_report"] = _safe_load_json(correction_dir / "eval_report.json") if correction_dir.exists() else None
+    data["correction_results"] = _safe_load_json(correction_dir / "corrected_results.json") if correction_dir.exists() else None
+
+    # Predict 2 results
+    predict_dir = run / "predictions"
+    data["predict_results"] = _safe_load_json(predict_dir / "predict_results.json") if predict_dir.exists() else None
+
     # Candidates CSV
     candidates = []
     csv_path = run / "candidates.csv"

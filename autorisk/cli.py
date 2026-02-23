@@ -654,6 +654,141 @@ def saliency(
 
 
 
+@cli.command()
+@click.option("--results", "-r", required=True, help="Path to cosmos_results.json")
+@click.option("--gt", "-g", default=None, help="Path to GT labels CSV")
+@click.option("--params", "-p", "params_path", default=None, help="Path to optimal_params.json (skip search)")
+@click.option("--search", is_flag=True, help="Run random search for optimal parameters")
+@click.option("--loocv", is_flag=True, help="Run Leave-One-Out CV grid search")
+@click.option("--out", "-o", "output_dir", default="outputs/enhanced_correction", help="Output directory")
+@click.pass_context
+def correct(
+    ctx: click.Context,
+    results: str,
+    gt: str | None,
+    params_path: str | None,
+    search: bool,
+    loocv: bool,
+    output_dir: str,
+) -> None:
+    """Apply signal-based severity correction using TTC + fused scores."""
+    import json
+
+    from autorisk.eval.enhanced_correction import (
+        EnhancedCorrector,
+        evaluate_enhanced,
+        grid_search_enhanced,
+        load_gt_labels,
+        loocv_grid_search,
+        save_correction_outputs,
+    )
+
+    cfg = ctx.obj["cfg"]
+    results_path = Path(results)
+    results_dir = results_path.parent
+    save_dir = Path(output_dir)
+
+    with open(results_path, encoding="utf-8") as f:
+        cosmos_results = json.load(f)
+
+    # Load TTC data
+    ttc_path = results_dir / "ttc_results.json"
+    ttc_data = []
+    if ttc_path.exists():
+        with open(ttc_path, encoding="utf-8") as f:
+            ttc_data = json.load(f)
+
+    # Load GT
+    gt_path = Path(gt) if gt else Path(cfg.eval.gt_path)
+    gt_labels = load_gt_labels(gt_path)
+
+    # Load or search for params
+    loocv_report = None
+    if params_path:
+        with open(params_path, encoding="utf-8") as f:
+            params = json.load(f)
+    elif search or loocv:
+        params, _ = grid_search_enhanced(cosmos_results, ttc_data, gt_labels)
+        click.echo(f"Best params accuracy: {evaluate_enhanced(EnhancedCorrector(params).correct_batch(cosmos_results, ttc_data), gt_labels).accuracy:.3f}")
+    else:
+        # Try loading from existing output or use defaults
+        default_params_path = save_dir / "optimal_params.json"
+        if default_params_path.exists():
+            with open(default_params_path, encoding="utf-8") as f:
+                params = json.load(f)
+        else:
+            from autorisk.eval.enhanced_correction import DEFAULT_PARAMS
+            params = dict(DEFAULT_PARAMS)
+
+    # Run LOOCV if requested
+    if loocv:
+        loocv_report = loocv_grid_search(cosmos_results, ttc_data, gt_labels)
+        click.echo(f"LOOCV Accuracy: {loocv_report['loocv_accuracy']:.3f}")
+        click.echo(f"LOOCV Macro-F1: {loocv_report['loocv_f1']:.3f}")
+
+    # Apply correction
+    corrector = EnhancedCorrector(params)
+    corrected = corrector.correct_batch(cosmos_results, ttc_data)
+    report = evaluate_enhanced(corrected, gt_labels)
+
+    save_correction_outputs(corrected, report, params, save_dir, loocv_report)
+
+    click.echo(f"\nAccuracy: {report.accuracy:.3f} (was 0.350)")
+    click.echo(f"Macro-F1: {report.macro_f1:.3f}")
+    click.echo(f"Correct: {report.n_correct}/{report.n_total}")
+    click.echo(f"Saved to: {save_dir}")
+
+
+@cli.command("predict")
+@click.option("--results", "-r", required=True, help="Path to cosmos_results.json")
+@click.option("--clips-dir", "-d", default=None, help="Path to clips directory")
+@click.option("--out", "-o", "output_dir", default=None, help="Output directory")
+@click.option("--severity", "-s", multiple=True, default=("HIGH", "MEDIUM"), help="Severity filter")
+@click.pass_context
+def predict(
+    ctx: click.Context,
+    results: str,
+    clips_dir: str | None,
+    output_dir: str | None,
+    severity: tuple[str, ...],
+) -> None:
+    """Generate future prediction videos using Cosmos Predict 2."""
+    import json
+
+    from autorisk.cosmos.predict_client import CosmosPredictClient
+
+    cfg = ctx.obj["cfg"]
+    results_path = Path(results)
+    results_dir = results_path.parent
+    clips = Path(clips_dir) if clips_dir else results_dir / "clips"
+    save_dir = Path(output_dir) if output_dir else results_dir / "predictions"
+
+    with open(results_path, encoding="utf-8") as f:
+        cosmos_results = json.load(f)
+
+    # Unload Reason 2 if loaded to free VRAM
+    click.echo("Initializing Cosmos Predict 2...")
+    client = CosmosPredictClient(cfg)
+
+    predict_results = client.predict_batch(
+        cosmos_results=cosmos_results,
+        clips_dir=clips,
+        output_dir=save_dir,
+        severity_filter=set(severity),
+    )
+
+    client.unload()
+
+    click.echo(f"\nGenerated {len(predict_results)} prediction videos")
+    for pr in predict_results:
+        click.echo(f"  {pr['clip_name']}: {pr['output_path']}")
+    click.echo(f"Saved to: {save_dir}")
+
+    # Save predict metadata
+    with open(save_dir / "predict_results.json", "w", encoding="utf-8") as f:
+        json.dump(predict_results, f, indent=2, ensure_ascii=False)
+
+
 # Register extracted command groups.
 register_audit_commands(cli)
 register_multi_video_commands(cli)
