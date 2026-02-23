@@ -328,102 +328,33 @@ def audit_verify(
     json_out: str | None,
 ) -> None:
     """Verify an audit pack using checksums.sha256.txt."""
-    from autorisk.audit.verify import verify_audit_pack
-
-    require_attestation_key_match_signature = False
-    if str(profile).strip().lower() == "audit-grade":
-        strict = True
-        require_signature = True
-        require_public_key = True
-        require_attestation = True
-        trust_embedded_public_key = False
-        require_attestation_key_match_signature = True
-        click.echo(
-            "[audit-grade] "
-            + _format_effective_flags(
-                {
-                    "strict": strict,
-                    "require_signature": require_signature,
-                    "require_public_key": require_public_key,
-                    "require_attestation": require_attestation,
-                    "trust_embedded_public_key": trust_embedded_public_key,
-                    "require_attestation_key_match_signature": require_attestation_key_match_signature,
-                }
-            )
-        )
-    elif str(profile).strip().lower() == "default":
-        click.echo(
-            "[default] diagnostics mode: crypto requirements are NOT enforced. Do not use for audit-grade acceptance.",
-            err=True,
-        )
-        click.echo(
-            "Use: audit-verify --profile audit-grade --public-key-dir <TRUSTED_KEYRING> [--expect-pack-fingerprint <TICKET_FP>]",
-            err=True,
-        )
+    from autorisk.services.audit_verify_service import (
+        AuditVerifyServiceRequest,
+        run_audit_verify,
+    )
 
     revoked = _load_revoked_key_ids(
         revoked_key_ids=revoked_key_ids,
         revocation_file=revocation_file,
     )
-    result = verify_audit_pack(
-        pack,
-        strict=strict,
+    request = AuditVerifyServiceRequest(
+        pack=pack,
+        profile=profile,
+        strict=bool(strict),
         public_key=public_key,
         public_key_dir=public_key_dir,
-        require_signature=require_signature,
-        require_public_key=require_public_key,
-        require_attestation=require_attestation,
-        require_attestation_key_match_signature=require_attestation_key_match_signature,
-        expect_pack_fingerprint=expect_pack_fingerprint,
-        trust_embedded_public_key=trust_embedded_public_key,
+        require_signature=bool(require_signature),
+        require_public_key=bool(require_public_key),
+        require_attestation=bool(require_attestation),
+        trust_embedded_public_key=bool(trust_embedded_public_key),
         revoked_key_ids=revoked,
+        expect_pack_fingerprint=expect_pack_fingerprint,
+        json_out=json_out,
     )
-
-    click.echo(f"Source: {result.source}")
-    click.echo(f"Mode: {result.mode}")
-    click.echo(f"Pack root: {result.pack_root}")
-    click.echo(f"Checksums: {result.checksums_path}")
-    click.echo(f"Checksums SHA256: {result.checksums_sha256}")
-    click.echo(f"Pack fingerprint: {result.checksums_sha256}")
-    click.echo(f"Expected files: {result.expected_files}")
-    click.echo(f"Verified files: {result.verified_files}")
-    click.echo(f"Signature present: {result.signature_present}")
-    if result.signature_present:
-        click.echo(f"Signature path: {result.signature_path}")
-        click.echo(f"Signature key id: {result.signature_key_id}")
-        click.echo(f"Signature key source: {result.signature_key_source or 'none'}")
-        click.echo(f"Signature verified: {result.signature_verified}")
-    click.echo(f"Attestation present: {result.attestation_present}")
-    if result.attestation_present:
-        click.echo(f"Attestation path: {result.attestation_path}")
-        click.echo(f"Attestation key id: {result.attestation_key_id}")
-        click.echo(f"Attestation key source: {result.attestation_key_source or 'none'}")
-    click.echo(f"Attestation verified: {result.attestation_verified}")
-    if result.expected_pack_fingerprint != "":
-        click.echo(f"Expected fingerprint: {result.expected_pack_fingerprint}")
-        click.echo(
-            f"Expected fingerprint match: {result.expected_pack_fingerprint_match}"
-        )
-    unchecked_files = list(result.unchecked_files or [])
-    click.echo(f"Unchecked files: {len(unchecked_files)}")
-    for rel in unchecked_files[:20]:
-        click.echo(f"  - {rel}")
-    if len(unchecked_files) > 20:
-        click.echo(f"  ... ({len(unchecked_files) - 20} more)")
-    click.echo(f"Issues: {len(result.issues)}")
-
-    if json_out is not None and str(json_out).strip() != "":
-        out_path = Path(json_out).expanduser().resolve()
-        out_path.write_text(result.to_json(), encoding="utf-8")
-        click.echo(f"Wrote: {out_path}")
-
-    if result.issues:
-        for issue in result.issues[:50]:
-            click.echo(f"- {issue.kind}: {issue.path} {issue.detail}".rstrip())
-        if len(result.issues) > 50:
-            click.echo(f"... ({len(result.issues) - 50} more)")
-        if strict:
-            raise SystemExit(2)
+    run_audit_verify(
+        request,
+        emit=lambda message, is_err: click.echo(message, err=is_err),
+    )
 
 
 @click.command("audit-verifier-bundle")
