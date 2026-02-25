@@ -97,6 +97,71 @@ def render(data: dict) -> None:
                         st.caption("Predicted Future (5s)")
                         st.video(str(pred_path))
 
+        # Counterfactual videos (DANGER / SAFE)
+        cf_results = data.get("counterfactual_results")
+        if cf_results and isinstance(cf_results, list):
+            cf_lookup = {
+                str(c.get("clip_name", "")): c
+                for c in cf_results if isinstance(c, dict)
+            }
+            cf_data = cf_lookup.get(clip_name)
+            if cf_data:
+                danger = cf_data.get("danger", {})
+                safe = cf_data.get("safe", {})
+                danger_path = Path(danger.get("output_path", "")) if danger.get("output_path") else None
+                safe_path = Path(safe.get("output_path", "")) if safe.get("output_path") else None
+
+                if (danger_path and danger_path.exists()) or (safe_path and safe_path.exists()):
+                    st.markdown("**Counterfactual Analysis: What If?**")
+                    cf_col1, cf_col2, cf_col3 = st.columns(3)
+                    with cf_col1:
+                        st.markdown(
+                            '<div style="border:2px solid #6B7280; border-radius:8px; padding:4px;">',
+                            unsafe_allow_html=True,
+                        )
+                        st.caption("Original Clip")
+                        if clip_path.exists():
+                            st.video(str(clip_path))
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    with cf_col2:
+                        st.markdown(
+                            '<div style="border:2px solid #EF4444; border-radius:8px; padding:4px;">',
+                            unsafe_allow_html=True,
+                        )
+                        st.caption("DANGER: No Reaction")
+                        if danger_path and danger_path.exists():
+                            st.video(str(danger_path))
+                        else:
+                            st.info("Not generated")
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    with cf_col3:
+                        st.markdown(
+                            '<div style="border:2px solid #10B981; border-radius:8px; padding:4px;">',
+                            unsafe_allow_html=True,
+                        )
+                        st.caption("SAFE: Evasive Action")
+                        if safe_path and safe_path.exists():
+                            st.video(str(safe_path))
+                        else:
+                            st.info("Not generated")
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                    with st.expander("Counterfactual Prompts & Stats"):
+                        st.markdown("**DANGER prompt:**")
+                        st.code(danger.get("prompt", "N/A"), language=None)
+                        if danger.get("generation_time_sec"):
+                            st.caption(
+                                f"Generated in {danger['generation_time_sec']}s, "
+                                f"{danger.get('n_frames', 0)} frames, seed={danger.get('seed', 'N/A')}"
+                            )
+                        st.markdown("**SAFE prompt:**")
+                        st.code(safe.get("prompt", "N/A"), language=None)
+                        if safe.get("generation_time_sec"):
+                            st.caption(
+                                f"Generated in {safe['generation_time_sec']}s, "
+                                f"{safe.get('n_frames', 0)} frames, seed={safe.get('seed', 'N/A')}"
+                            )
+
         # Saliency heatmap
         sal_data = saliency_images.get(clip_name, {})
         if sal_data:

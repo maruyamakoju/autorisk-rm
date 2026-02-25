@@ -789,6 +789,74 @@ def predict(
         json.dump(predict_results, f, indent=2, ensure_ascii=False)
 
 
+@cli.command("counterfactual")
+@click.option("--results", "-r", required=True, help="Path to cosmos_results.json")
+@click.option("--corrected", default=None, help="Path to corrected_results.json (for signal-corrected severity)")
+@click.option("--clips-dir", "-d", default=None, help="Path to clips directory")
+@click.option("--out", "-o", "output_dir", default=None, help="Output directory")
+@click.option("--severity", "-s", multiple=True, default=("HIGH",), help="Severity filter")
+@click.option("--danger-seed", default=42, type=int, help="Seed for danger scenario")
+@click.option("--safe-seed", default=137, type=int, help="Seed for safe scenario")
+@click.pass_context
+def counterfactual(
+    ctx: click.Context,
+    results: str,
+    corrected: str | None,
+    clips_dir: str | None,
+    output_dir: str | None,
+    severity: tuple[str, ...],
+    danger_seed: int,
+    safe_seed: int,
+) -> None:
+    """Generate DANGER/SAFE counterfactual video pairs using Cosmos Predict 2."""
+    import json
+
+    from autorisk.cosmos.predict_client import CosmosPredictClient
+
+    cfg = ctx.obj["cfg"]
+    results_path = Path(results)
+    results_dir = results_path.parent
+    clips = Path(clips_dir) if clips_dir else results_dir / "clips"
+    save_dir = Path(output_dir) if output_dir else results_dir / "counterfactuals"
+
+    with open(results_path, encoding="utf-8") as f:
+        cosmos_results = json.load(f)
+
+    corrected_results = None
+    if corrected:
+        with open(corrected, encoding="utf-8") as f:
+            corrected_results = json.load(f)
+
+    click.echo("Initializing Cosmos Predict 2 for counterfactual generation...")
+    client = CosmosPredictClient(cfg)
+
+    cf_results = client.predict_counterfactual_batch(
+        cosmos_results=cosmos_results,
+        clips_dir=clips,
+        output_dir=save_dir,
+        severity_filter=set(severity),
+        corrected_results=corrected_results,
+        danger_seed=danger_seed,
+        safe_seed=safe_seed,
+    )
+
+    client.unload()
+
+    n_videos = sum(
+        (1 if r.get("danger", {}).get("output_path") else 0)
+        + (1 if r.get("safe", {}).get("output_path") else 0)
+        for r in cf_results
+    )
+    click.echo(f"\nGenerated {n_videos} counterfactual videos ({len(cf_results)} clips)")
+    for cr in cf_results:
+        d_path = cr.get("danger", {}).get("output_path", "")
+        s_path = cr.get("safe", {}).get("output_path", "")
+        click.echo(f"  {cr['clip_name']}:")
+        click.echo(f"    DANGER: {d_path}")
+        click.echo(f"    SAFE:   {s_path}")
+    click.echo(f"Saved to: {save_dir}")
+
+
 # Register extracted command groups.
 register_audit_commands(cli)
 register_multi_video_commands(cli)

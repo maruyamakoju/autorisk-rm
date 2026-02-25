@@ -131,6 +131,10 @@ def load_data(run_dir: str) -> dict:
     predict_dir = run / "predictions"
     data["predict_results"] = _safe_load_json(predict_dir / "predict_results.json") if predict_dir.exists() else None
 
+    # Counterfactual results
+    cf_dir = run / "counterfactuals"
+    data["counterfactual_results"] = _safe_load_json(cf_dir / "counterfactual_results.json") if cf_dir.exists() else None
+
     # Candidates CSV
     candidates = []
     csv_path = run / "candidates.csv"
