@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Models** | Cosmos-Reason2-8B, Cosmos-Predict2-2B-Video2World |
-| **Workflow** | Analysis + Inference + Prediction |
+| **Workflow** | Analysis + Inference + Prediction + Counterfactual |
 | **Use Case** | Autonomous Vehicle Safety, Fleet Management |
 | **Hardware** | NVIDIA RTX 5090 (32 GB VRAM) |
 | **Input** | Long dashcam video (any length) |
@@ -23,7 +23,8 @@ Every day, fleet operators and AV developers review thousands of hours of dashca
 2. **Cosmos Reason 2** provides structured causal reasoning ("*why* is this dangerous?") with severity classification
 3. **Signal-Based Correction** fuses TTC and mining signals to improve VLM predictions (35% -> 65% accuracy)
 4. **Cosmos Predict 2** generates "what happens next" videos for high-severity events
-5. **Interactive Dashboard** enables analysts to explore, search, and compare results
+5. **Counterfactual Analysis** creates DANGER (no reaction) vs SAFE (evasive action) scenario pairs
+6. **Interactive Dashboard** enables analysts to explore, search, and compare results
 
 **Impact for fleet safety and AV development:**
 - Reduce dashcam review time from hours to minutes
@@ -43,8 +44,9 @@ graph LR
     C --> B3["B3: Severity Ranking"]
     B3 --> B4["B4/B5: Eval + Analysis<br/>TTC, Grounding, Calibration"]
     B3 --> P2["Cosmos Predict 2<br/>Future Video Generation"]
+    P2 --> CF["Counterfactual Analysis<br/>DANGER vs SAFE scenarios"]
     B4 --> D["Dashboard + Report"]
-    P2 --> D
+    CF --> D
 ```
 
 **Multi-model Cosmos pipeline:**
@@ -127,8 +129,22 @@ Parameters optimized via random search with LOOCV validation (45% generalization
 For HIGH and MEDIUM severity clips, the last frame is fed to `nvidia/Cosmos-Predict2-2B-Video2World` to generate "what happens next" prediction videos.
 
 - Prompt auto-constructed from Reason 2 causal reasoning output
-- Generates 5-second prediction videos at 24 FPS
-- Enables counterfactual analysis and training data augmentation
+- Generates 5-second prediction videos (49 frames, 832x480, BF16)
+- 10/10 clips generated successfully (~115s/clip on RTX 5090)
+
+### Stage 4b: Counterfactual Analysis (DANGER vs SAFE)
+
+For each HIGH-severity clip, generates **two alternative futures** using different prompts and seeds:
+
+| Scenario | Prompt Strategy | Seed | Purpose |
+|----------|----------------|------|---------|
+| **DANGER** | causal_reasoning + prediction + "driver does not react" + hazard-specific collision | 42 | What happens if no action is taken |
+| **SAFE** | recommended_action + "evasive action" + hazard-specific safe resolution | 137 | What happens if the driver reacts correctly |
+
+- Uses subprocess isolation per video to prevent CUDA error cascading
+- 8/8 videos generated (4 HIGH clips x 2 scenarios, ~122s/video)
+- Hazard-specific language: pedestrian strike, sideswipe collision, safe crossing, etc.
+- Leverages `recommended_action` field from Cosmos Reason 2 output
 
 ### Stage 5: Evaluation & Analysis (B4/B5)
 
@@ -188,7 +204,7 @@ python -m autorisk.cli dashboard
 | Page | Description |
 |------|-------------|
 | **Overview** | KPI cards, severity distribution, detection timeline, pipeline architecture |
-| **Clip Explorer** | Per-clip video, VLM output, signal radar, TTC timeline, saliency, Predict 2 preview |
+| **Clip Explorer** | Per-clip video, VLM output, signal radar, TTC timeline, saliency, Predict 2 preview, counterfactual DANGER/SAFE |
 | **Search** | Keyword search over hazards, reasoning, and evidence across all clips |
 | **Evaluation** | Confusion matrix, error analysis, checklist, correction before/after comparison |
 | **Signal Analysis** | Signal-severity heatmap, correlations, threshold performance, ablation |
@@ -312,6 +328,9 @@ python -m autorisk.cli correct -r outputs/public_run/cosmos_results.json -o outp
 # Future prediction with Cosmos Predict 2
 python -m autorisk.cli predict -r outputs/public_run/cosmos_results.json
 
+# Counterfactual DANGER/SAFE video pairs for HIGH clips
+python -m autorisk.cli counterfactual -r outputs/public_run/cosmos_results.json
+
 # Launch dashboard to explore everything
 python -m autorisk.cli dashboard
 ```
@@ -331,6 +350,7 @@ python -m autorisk.cli dashboard
 | | `eval` | B4: Evaluation against ground truth |
 | | `correct` | Signal-based severity correction (TTC + fused) |
 | | `predict` | Cosmos Predict 2 future video generation |
+| | `counterfactual` | DANGER/SAFE counterfactual video pairs |
 | **Analysis** | `ablation` | B5: Minimal ablation study |
 | | `analyze` | Deep analysis (signal/error/per-class) |
 | | `ttc` | Time-to-Collision via YOLOv8n + ByteTrack |
@@ -379,7 +399,7 @@ autorisk/
 configs/          # YAML configs (default, public, japan, winter, us_highway)
 data/annotations/ # Blind-labeled GT severity + checklist scores
 scripts/          # Pipeline runners, video download, metrics generation
-tests/            # 90+ unit tests
+tests/            # 130 unit tests
 ```
 
 ---
