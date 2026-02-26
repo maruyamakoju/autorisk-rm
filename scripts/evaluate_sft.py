@@ -38,7 +38,7 @@ def parse_args():
         "--split", choices=["val", "train", "all"], default="val",
         help="Which data split to evaluate on (default: val)"
     )
-    p.add_argument("--nframes", type=int, default=4, help="Video frames to sample (default 4 for 8B on 32GB)")
+    p.add_argument("--nframes", type=int, default=2, help="Video frames to sample (default 2 for 8B on 32GB)")
     p.add_argument("--max-new-tokens", type=int, default=5,
                    help="Max tokens to generate per answer (MCQ answer is 1 letter)")
     p.add_argument(
@@ -238,6 +238,7 @@ def load_base_model(model_name: str, hf_token: str | None):
         attn_implementation="sdpa",
         token=hf_token,
     )
+    model.eval()
     return model, processor
 
 
@@ -256,6 +257,7 @@ def load_lora_model(model_name: str, checkpoint_path: Path, hf_token: str | None
     model = PeftModel.from_pretrained(base, str(checkpoint_path))
     # Merge LoRA weights into base for faster inference
     model = model.merge_and_unload()
+    model.eval()
     return model, processor
 
 

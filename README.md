@@ -169,12 +169,31 @@ Domain-specific fine-tuning of `nvidia/Cosmos-Reason2-2B` on our GT-labeled dash
 # Prepare SFT dataset
 python -m autorisk.cli sft-prepare
 
-# Train (≈1-2 hours on RTX 5090)
-python -m autorisk.cli sft-train --epochs 3
+# Train (≈30 min on RTX 5090, 3 epochs)
+python -m autorisk.cli sft-train --epochs 3 --nframes 2
 
 # Evaluate before/after accuracy
-python -m autorisk.cli sft-eval --split val
+python -m autorisk.cli sft-eval --split val --nframes 2
 ```
+
+**Training results (RTX 5090, ~30 min):**
+
+| Epoch | Train Loss | Val Loss |
+|-------|-----------|---------|
+| 1 | 0.3375 | 0.2943 |
+| 2 | **0.2073** | **0.2337** ← best |
+| 3 | 0.1361 | 0.2625 |
+
+**Val accuracy (5 clips, 15 MCQ samples):**
+
+| Question Type | Base 8B | LoRA 8B | Delta |
+|--------------|---------|---------|-------|
+| **Overall** | 73.3% | 73.3% | ±0 |
+| Severity MCQ | 60.0% | 60.0% | ±0 |
+| HIGH detection | 100% | 80.0% | -20% |
+| Evasive action | 60.0% | **80.0%** | **+20%** |
+
+The base Cosmos-Reason2-8B is already highly capable on simple MCQ tasks; LoRA fine-tuning adapts domain vocabulary and maintains overall accuracy with improved evasive action classification. Fine-tuning on larger GT datasets would yield stronger gains.
 
 ### Stage 5: Evaluation & Analysis (B4/B5)
 

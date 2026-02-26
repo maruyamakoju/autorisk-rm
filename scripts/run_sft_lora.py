@@ -39,7 +39,7 @@ LORA_TARGET_MODULES = [
 ]
 
 # Training config
-NFRAMES = 4           # 4 frames (conservative for 8B on 32GB; 2B used 8)
+NFRAMES = 2           # 2 frames (very conservative for 8B on 32GB; increase if VRAM allows)
 MAX_SEQ_LEN = 4096
 BATCH_SIZE = 1        # per-step batch (single GPU)
 GRAD_ACCUM = 8        # effective batch = 8
@@ -311,10 +311,10 @@ def main():
         attn_implementation="sdpa",
         token=hf_token,
     )
-    model.train()
     print(f"Model loaded in {time.time() - t0:.1f}s")
+    print(f"VRAM after load: {torch.cuda.memory_allocated() / 1024**3:.1f}GB")
 
-    # Enable gradient checkpointing (saves ~30% VRAM during training)
+    # Enable gradient checkpointing BEFORE applying LoRA (saves ~30% activation memory)
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
 
     # Apply LoRA
@@ -329,6 +329,8 @@ def main():
         inference_mode=False,
     )
     model = get_peft_model(model, lora_config)
+    # Required for gradient flow with gradient checkpointing + PEFT
+    model.enable_input_require_grads()
     model.print_trainable_parameters()
 
     # Get special token IDs for label masking
