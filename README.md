@@ -4,8 +4,8 @@
 
 | | |
 |---|---|
-| **Models** | Cosmos-Reason2-8B, Cosmos-Predict2-2B-Video2World |
-| **Workflow** | Analysis + Inference + Prediction + Counterfactual |
+| **Models** | Cosmos-Reason2-8B/2B, Cosmos-Predict2-2B-Video2World |
+| **Workflow** | Analysis + Inference + Prediction + Counterfactual + LoRA Post-Training |
 | **Use Case** | Autonomous Vehicle Safety, Fleet Management |
 | **Hardware** | NVIDIA RTX 5090 (32 GB VRAM) |
 | **Input** | Long dashcam video (any length) |
@@ -24,7 +24,8 @@ Every day, fleet operators and AV developers review thousands of hours of dashca
 3. **Signal-Based Correction** fuses TTC and mining signals to improve VLM predictions (35% -> 65% accuracy)
 4. **Cosmos Predict 2** generates "what happens next" videos for high-severity events
 5. **Counterfactual Analysis** creates DANGER (no reaction) vs SAFE (evasive action) scenario pairs
-6. **Interactive Dashboard** enables analysts to explore, search, and compare results
+6. **LoRA Post-Training** fine-tunes Cosmos Reason 2-2B on domain-specific dashcam data (single RTX 5090)
+7. **Interactive Dashboard** enables analysts to explore, search, and compare results
 
 **Impact for fleet safety and AV development:**
 - Reduce dashcam review time from hours to minutes
@@ -45,8 +46,10 @@ graph LR
     B3 --> B4["B4/B5: Eval + Analysis<br/>TTC, Grounding, Calibration"]
     B3 --> P2["Cosmos Predict 2<br/>Future Video Generation"]
     P2 --> CF["Counterfactual Analysis<br/>DANGER vs SAFE scenarios"]
+    B4 --> LR["LoRA Post-Training<br/>Cosmos-Reason2-2B SFT"]
     B4 --> D["Dashboard + Report"]
     CF --> D
+    LR --> D
 ```
 
 **Multi-model Cosmos pipeline:**
@@ -145,6 +148,33 @@ For each HIGH-severity clip, generates **two alternative futures** using differe
 - 8/8 videos generated (4 HIGH clips x 2 scenarios, ~122s/video)
 - Hazard-specific language: pedestrian strike, sideswipe collision, safe crossing, etc.
 - Leverages `recommended_action` field from Cosmos Reason 2 output
+
+### Stage 4c: LoRA Post-Training (Cosmos Reason 2-2B)
+
+Domain-specific fine-tuning of `nvidia/Cosmos-Reason2-2B` on our GT-labeled dashcam clips using PEFT LoRA — directly on a single RTX 5090 (no multi-node cluster required).
+
+**Training data**: 20 clips × 3 question types = 60 MCQ samples:
+- **Severity MCQ** (4-choice: NONE/LOW/MEDIUM/HIGH) — primary task
+- **HIGH detection binary** (requires immediate action?)
+- **Evasive action binary** (MEDIUM or HIGH?)
+
+**LoRA configuration** (matches Cosmos Cookbook recipe):
+- Base: `nvidia/Cosmos-Reason2-2B` (Qwen3-VL backbone)
+- LoRA: r=16, alpha=32, target\_modules=[q/k/v/o/gate/up/down\_proj]
+- nframes=8 (≈3k vision tokens), BF16, gradient checkpointing
+- Effective batch size=8 (1 sample × 8 gradient accumulation steps)
+- Train/val split at clip level (15 clips train / 5 clips val, no data leakage)
+
+```bash
+# Prepare SFT dataset
+python -m autorisk.cli sft-prepare
+
+# Train (≈1-2 hours on RTX 5090)
+python -m autorisk.cli sft-train --epochs 3
+
+# Evaluate before/after accuracy
+python -m autorisk.cli sft-eval --split val
+```
 
 ### Stage 5: Evaluation & Analysis (B4/B5)
 
@@ -331,6 +361,11 @@ python -m autorisk.cli predict -r outputs/public_run/cosmos_results.json
 # Counterfactual DANGER/SAFE video pairs for HIGH clips
 python -m autorisk.cli counterfactual -r outputs/public_run/cosmos_results.json
 
+# LoRA post-training on GT-labeled clips (single RTX 5090, ~1-2 hours)
+python -m autorisk.cli sft-prepare
+python -m autorisk.cli sft-train --epochs 3
+python -m autorisk.cli sft-eval --split val
+
 # Launch dashboard to explore everything
 python -m autorisk.cli dashboard
 ```
@@ -351,6 +386,9 @@ python -m autorisk.cli dashboard
 | | `correct` | Signal-based severity correction (TTC + fused) |
 | | `predict` | Cosmos Predict 2 future video generation |
 | | `counterfactual` | DANGER/SAFE counterfactual video pairs |
+| **Post-Training** | `sft-prepare` | Build LLaVA JSON SFT dataset from GT clips |
+| | `sft-train` | LoRA fine-tune Cosmos-Reason2-2B (single GPU) |
+| | `sft-eval` | Before/after accuracy comparison on val set |
 | **Analysis** | `ablation` | B5: Minimal ablation study |
 | | `analyze` | Deep analysis (signal/error/per-class) |
 | | `ttc` | Time-to-Collision via YOLOv8n + ByteTrack |

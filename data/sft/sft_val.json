@@ -1,0 +1,242 @@
+[
+  {
+    "id": "candidate_002_t145.0s_severity_mcq",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_002_t145.0s.mp4",
+    "type": "severity_mcq",
+    "gt_severity": "HIGH",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip carefully. What is the danger severity level?\nA: NONE - Normal driving, no hazard detected\nB: LOW - Attention needed but safe margin exists\nC: MEDIUM - Evasive action warranted (decelerate or yield)\nD: HIGH - Collision risk, immediate emergency response needed\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "D"
+      }
+    ]
+  },
+  {
+    "id": "candidate_002_t145.0s_high_detection",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_002_t145.0s.mp4",
+    "type": "high_detection",
+    "gt_severity": "HIGH",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip. Does it show a HIGH severity danger requiring immediate emergency action from the driver?\nA: Yes\nB: No\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "A"
+      }
+    ]
+  },
+  {
+    "id": "candidate_002_t145.0s_evasive_action",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_002_t145.0s.mp4",
+    "type": "evasive_action",
+    "gt_severity": "HIGH",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip. Does the driver need to take evasive action (decelerate, brake hard, or change lane) to avoid a potential hazard?\nA: Yes\nB: No\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "A"
+      }
+    ]
+  },
+  {
+    "id": "candidate_003_t137.0s_severity_mcq",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_003_t137.0s.mp4",
+    "type": "severity_mcq",
+    "gt_severity": "LOW",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip carefully. What is the danger severity level?\nA: NONE - Normal driving, no hazard detected\nB: LOW - Attention needed but safe margin exists\nC: MEDIUM - Evasive action warranted (decelerate or yield)\nD: HIGH - Collision risk, immediate emergency response needed\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "B"
+      }
+    ]
+  },
+  {
+    "id": "candidate_003_t137.0s_high_detection",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_003_t137.0s.mp4",
+    "type": "high_detection",
+    "gt_severity": "LOW",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip. Does it show a HIGH severity danger requiring immediate emergency action from the driver?\nA: Yes\nB: No\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "B"
+      }
+    ]
+  },
+  {
+    "id": "candidate_003_t137.0s_evasive_action",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_003_t137.0s.mp4",
+    "type": "evasive_action",
+    "gt_severity": "LOW",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip. Does the driver need to take evasive action (decelerate, brake hard, or change lane) to avoid a potential hazard?\nA: Yes\nB: No\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "B"
+      }
+    ]
+  },
+  {
+    "id": "candidate_007_t46.0s_severity_mcq",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_007_t46.0s.mp4",
+    "type": "severity_mcq",
+    "gt_severity": "LOW",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip carefully. What is the danger severity level?\nA: NONE - Normal driving, no hazard detected\nB: LOW - Attention needed but safe margin exists\nC: MEDIUM - Evasive action warranted (decelerate or yield)\nD: HIGH - Collision risk, immediate emergency response needed\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "B"
+      }
+    ]
+  },
+  {
+    "id": "candidate_007_t46.0s_high_detection",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_007_t46.0s.mp4",
+    "type": "high_detection",
+    "gt_severity": "LOW",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip. Does it show a HIGH severity danger requiring immediate emergency action from the driver?\nA: Yes\nB: No\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "B"
+      }
+    ]
+  },
+  {
+    "id": "candidate_007_t46.0s_evasive_action",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_007_t46.0s.mp4",
+    "type": "evasive_action",
+    "gt_severity": "LOW",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip. Does the driver need to take evasive action (decelerate, brake hard, or change lane) to avoid a potential hazard?\nA: Yes\nB: No\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "B"
+      }
+    ]
+  },
+  {
+    "id": "candidate_012_t7.0s_severity_mcq",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_012_t7.0s.mp4",
+    "type": "severity_mcq",
+    "gt_severity": "MEDIUM",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip carefully. What is the danger severity level?\nA: NONE - Normal driving, no hazard detected\nB: LOW - Attention needed but safe margin exists\nC: MEDIUM - Evasive action warranted (decelerate or yield)\nD: HIGH - Collision risk, immediate emergency response needed\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "C"
+      }
+    ]
+  },
+  {
+    "id": "candidate_012_t7.0s_high_detection",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_012_t7.0s.mp4",
+    "type": "high_detection",
+    "gt_severity": "MEDIUM",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip. Does it show a HIGH severity danger requiring immediate emergency action from the driver?\nA: Yes\nB: No\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "B"
+      }
+    ]
+  },
+  {
+    "id": "candidate_012_t7.0s_evasive_action",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_012_t7.0s.mp4",
+    "type": "evasive_action",
+    "gt_severity": "MEDIUM",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip. Does the driver need to take evasive action (decelerate, brake hard, or change lane) to avoid a potential hazard?\nA: Yes\nB: No\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "A"
+      }
+    ]
+  },
+  {
+    "id": "candidate_018_t114.0s_severity_mcq",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_018_t114.0s.mp4",
+    "type": "severity_mcq",
+    "gt_severity": "LOW",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip carefully. What is the danger severity level?\nA: NONE - Normal driving, no hazard detected\nB: LOW - Attention needed but safe margin exists\nC: MEDIUM - Evasive action warranted (decelerate or yield)\nD: HIGH - Collision risk, immediate emergency response needed\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "B"
+      }
+    ]
+  },
+  {
+    "id": "candidate_018_t114.0s_high_detection",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_018_t114.0s.mp4",
+    "type": "high_detection",
+    "gt_severity": "LOW",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip. Does it show a HIGH severity danger requiring immediate emergency action from the driver?\nA: Yes\nB: No\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "B"
+      }
+    ]
+  },
+  {
+    "id": "candidate_018_t114.0s_evasive_action",
+    "video": "C:\\Users\\07013\\Desktop\\0211\\outputs\\public_run\\clips\\candidate_018_t114.0s.mp4",
+    "type": "evasive_action",
+    "gt_severity": "LOW",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<video>\nWatch this dashcam clip. Does the driver need to take evasive action (decelerate, brake hard, or change lane) to avoid a potential hazard?\nA: Yes\nB: No\nAnswer with the option's letter from the given choices directly."
+      },
+      {
+        "from": "gpt",
+        "value": "B"
+      }
+    ]
+  }
+]

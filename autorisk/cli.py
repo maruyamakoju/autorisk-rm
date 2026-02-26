@@ -857,6 +857,114 @@ def counterfactual(
     click.echo(f"Saved to: {save_dir}")
 
 
+@cli.command("sft-prepare")
+@click.option("--gt", default="data/annotations/gt_labels.csv", help="Path to GT labels CSV")
+@click.option("--clips-dir", default=None, help="Path to clips directory (default: outputs/public_run/clips)")
+@click.option("--out", "-o", "output_dir", default="data/sft", help="Output directory for SFT JSON files")
+@click.pass_context
+def sft_prepare(ctx: click.Context, gt: str, clips_dir: str | None, output_dir: str) -> None:
+    """Prepare SFT dataset from GT-labeled clips (3 Q types per clip).
+
+    Generates severity MCQ, HIGH detection binary, and evasive action binary
+    samples in LLaVA JSON format for Cosmos Reason 2 LoRA fine-tuning.
+    """
+    import subprocess
+    import sys
+
+    script = Path(__file__).parent.parent / "scripts" / "prepare_sft_data.py"
+    if not script.exists():
+        click.echo(f"Error: script not found at {script}", err=True)
+        raise SystemExit(1)
+
+    cmd = [sys.executable, str(script)]
+    click.echo(f"Running: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True)
+
+
+@cli.command("sft-train")
+@click.option("--epochs", default=3, type=int, help="Number of training epochs")
+@click.option("--lr", default=2e-4, type=float, help="Learning rate")
+@click.option("--nframes", default=8, type=int, help="Video frames to sample per clip")
+@click.option("--data-dir", default="data/sft", help="Directory with sft_train.json / sft_val.json")
+@click.option("--out", "-o", "output_dir", default="outputs/sft_lora", help="Output directory for checkpoints")
+@click.pass_context
+def sft_train(
+    ctx: click.Context,
+    epochs: int,
+    lr: float,
+    nframes: int,
+    data_dir: str,
+    output_dir: str,
+) -> None:
+    """LoRA fine-tune Cosmos-Reason2-2B on dashcam severity classification.
+
+    Single RTX 5090 training with PEFT LoRA (r=16, alpha=32).
+    Estimated ~1-2 hours for 3 epochs on 20 clips.
+    """
+    import subprocess
+    import sys
+
+    script = Path(__file__).parent.parent / "scripts" / "run_sft_lora.py"
+    if not script.exists():
+        click.echo(f"Error: script not found at {script}", err=True)
+        raise SystemExit(1)
+
+    cmd = [
+        sys.executable, str(script),
+        "--epochs", str(epochs),
+        "--lr", str(lr),
+        "--nframes", str(nframes),
+        "--data-dir", data_dir,
+        "--output-dir", output_dir,
+    ]
+    click.echo(f"Running LoRA training: epochs={epochs}, lr={lr}, nframes={nframes}")
+    subprocess.run(cmd, check=True)
+
+
+@cli.command("sft-eval")
+@click.option("--checkpoint", default="outputs/sft_lora/best_checkpoint",
+              help="Path to LoRA adapter checkpoint")
+@click.option("--data-dir", default="data/sft", help="Directory with SFT JSON files")
+@click.option("--split", default="val", type=click.Choice(["val", "train", "all"]),
+              help="Data split to evaluate on")
+@click.option("--nframes", default=8, type=int, help="Video frames to sample")
+@click.option("--no-base", is_flag=True, help="Skip base model inference")
+@click.pass_context
+def sft_eval(
+    ctx: click.Context,
+    checkpoint: str,
+    data_dir: str,
+    split: str,
+    nframes: int,
+    no_base: bool,
+) -> None:
+    """Evaluate LoRA fine-tuned vs base Cosmos-Reason2-2B on SFT val set.
+
+    Runs MCQ inference for severity, HIGH detection, and evasive action questions,
+    then prints before/after accuracy comparison.
+    """
+    import subprocess
+    import sys
+
+    script = Path(__file__).parent.parent / "scripts" / "evaluate_sft.py"
+    if not script.exists():
+        click.echo(f"Error: script not found at {script}", err=True)
+        raise SystemExit(1)
+
+    cmd = [
+        sys.executable, str(script),
+        "--checkpoint", checkpoint,
+        "--data-dir", data_dir,
+        "--split", split,
+        "--nframes", str(nframes),
+    ]
+    if no_base:
+        cmd.append("--no-base")
+
+    click.echo(f"Running SFT evaluation (split={split}, checkpoint={checkpoint})")
+    subprocess.run(cmd, check=True)
+
+
 # Register extracted command groups.
 register_audit_commands(cli)
 register_multi_video_commands(cli)
