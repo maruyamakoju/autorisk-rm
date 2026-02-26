@@ -1,4 +1,4 @@
-"""Evaluate LoRA fine-tuned Cosmos-Reason2-2B vs base model on SFT val set.
+"""Evaluate LoRA fine-tuned Cosmos-Reason2-8B vs base model on SFT val set.
 
 Runs MCQ inference on the validation split (or train/all), computes accuracy
 for each question type (severity_mcq, high_detection, evasive_action), and
@@ -38,7 +38,7 @@ def parse_args():
         "--split", choices=["val", "train", "all"], default="val",
         help="Which data split to evaluate on (default: val)"
     )
-    p.add_argument("--nframes", type=int, default=8, help="Video frames to sample")
+    p.add_argument("--nframes", type=int, default=4, help="Video frames to sample (default 4 for 8B on 32GB)")
     p.add_argument("--max-new-tokens", type=int, default=5,
                    help="Max tokens to generate per answer (MCQ answer is 1 letter)")
     p.add_argument(
@@ -284,7 +284,7 @@ def main():
         return
 
     device = torch.device("cuda")
-    MODEL_NAME = "nvidia/Cosmos-Reason2-2B"
+    MODEL_NAME = "nvidia/Cosmos-Reason2-8B"  # 2B not cached; use 8B
     hf_token = __import__("os").environ.get("HF_TOKEN", None)
 
     print(f"GPU: {torch.cuda.get_device_name(0)}")

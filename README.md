@@ -158,10 +158,10 @@ Domain-specific fine-tuning of `nvidia/Cosmos-Reason2-2B` on our GT-labeled dash
 - **HIGH detection binary** (requires immediate action?)
 - **Evasive action binary** (MEDIUM or HIGH?)
 
-**LoRA configuration** (matches Cosmos Cookbook recipe):
-- Base: `nvidia/Cosmos-Reason2-2B` (Qwen3-VL backbone)
+**LoRA configuration** (adapts Cosmos Cookbook recipe for single GPU):
+- Base: `nvidia/Cosmos-Reason2-8B` (Qwen3-VL backbone; already cached)
 - LoRA: r=16, alpha=32, target\_modules=[q/k/v/o/gate/up/down\_proj]
-- nframes=8 (≈3k vision tokens), BF16, gradient checkpointing
+- nframes=4, BF16, gradient checkpointing (fits 32GB VRAM)
 - Effective batch size=8 (1 sample × 8 gradient accumulation steps)
 - Train/val split at clip level (15 clips train / 5 clips val, no data leakage)
 

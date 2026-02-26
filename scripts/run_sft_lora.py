@@ -1,10 +1,13 @@
-"""LoRA fine-tuning of Cosmos-Reason2-2B on dashcam severity classification.
+"""LoRA fine-tuning of Cosmos-Reason2-8B on dashcam severity classification.
 
 Single-GPU training on RTX 5090 (32GB) using PEFT LoRA.
 Follows the Cosmos Cookbook Intelligent Transportation recipe approach,
 adapted for single-GPU with LoRA instead of full SFT on 8x A100.
 
-Usage: python scripts/run_sft_lora.py [--epochs 3] [--lr 2e-4] [--nframes 8]
+Uses Cosmos-Reason2-8B (already cached) with nframes=4 to fit 32GB VRAM.
+Base model weights are frozen; only LoRA adapter params are trained.
+
+Usage: python scripts/run_sft_lora.py [--epochs 3] [--lr 2e-4] [--nframes 4]
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ import torch
 # Config
 # ---------------------------------------------------------------------------
 
-MODEL_NAME = "nvidia/Cosmos-Reason2-2B"
+MODEL_NAME = "nvidia/Cosmos-Reason2-8B"  # 2B not cached; 8B works with LoRA + grad checkpointing
 OUTPUT_DIR = Path("outputs/sft_lora")
 DATA_DIR = Path("data/sft")
 
@@ -36,7 +39,7 @@ LORA_TARGET_MODULES = [
 ]
 
 # Training config
-NFRAMES = 8           # 8 frames → ~3k vision tokens (matches Cookbook recipe)
+NFRAMES = 4           # 4 frames (conservative for 8B on 32GB; 2B used 8)
 MAX_SEQ_LEN = 4096
 BATCH_SIZE = 1        # per-step batch (single GPU)
 GRAD_ACCUM = 8        # effective batch = 8
@@ -48,7 +51,8 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--epochs", type=int, default=3)
     p.add_argument("--lr", type=float, default=2e-4)
-    p.add_argument("--nframes", type=int, default=NFRAMES)
+    p.add_argument("--nframes", type=int, default=NFRAMES,
+                   help="Video frames per clip (default 4; reduce if OOM)")
     p.add_argument("--output-dir", default=str(OUTPUT_DIR))
     p.add_argument("--data-dir", default=str(DATA_DIR))
     p.add_argument("--resume-from", default=None, help="Path to checkpoint dir to resume")
